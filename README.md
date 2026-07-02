@@ -4,11 +4,19 @@ An immersive, visually stunning 3D WebGL Web Application that visualizes the 99 
 
 ---
 
+[![Netlify Status](https://api.netlify.com/api/v1/badges/d64b16bd-7539-4903-9956-f4a1d7c30a8e/deploy-status)](https://app.netlify.com/projects/99-namesofallah/deploys)
+
 ##  App Preview
 
 ![Application Interface](./app-view.png)
 
 ---
+
+
+### Working preview
+
+https://99-namesofallah.netlify.app/
+
 
 ## Features
 
