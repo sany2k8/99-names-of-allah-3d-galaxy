@@ -1,0 +1,18 @@
+{
+  "collections": {
+    "users": {
+      "schema": {
+        "email": "string",
+        "createdAt": "timestamp"
+      }
+    },
+    "user_data": {
+      "schema": {
+        "userId": "string",
+        "favorites": "array",
+        "completed": "array",
+        "updatedAt": "timestamp"
+      }
+    }
+  }
+}

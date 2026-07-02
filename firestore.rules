@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global default-deny rule
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Secure user_data collection
+    match /user_data/{userId} {
+      // Allow read and write only if the logged-in user's UID matches the document ID
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Secure users collection
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

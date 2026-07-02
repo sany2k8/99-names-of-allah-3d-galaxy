@@ -1,0 +1,6 @@
+{
+  "name": "99 Names of Allah 3D Galaxy",
+  "description": "An immersive, interactive 3D space galaxy web application showcasing the 99 Names of Allah (Asma-ul-Husna) with elegant Arabic calligraphy, English/Bengali translations, ambient atmospheric audio, personal progress tracking, and secure Firebase synchronization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

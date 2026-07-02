@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-arabic: "Amiri", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Glassmorphism custom styling utilities matching Elegant Dark */
+.glass-panel {
+  background: rgba(5, 5, 5, 0.82);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gold-glass-panel {
+  background: rgba(10, 8, 5, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+.emerald-glass-panel {
+  background: rgba(1, 7, 4, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.rose-glass-panel {
+  background: rgba(10, 2, 8, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(217, 70, 239, 0.15);
+}
+
+.ruby-glass-panel {
+  background: rgba(11, 1, 1, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.nebula-glass-panel {
+  background: rgba(3, 2, 10, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+/* Beautiful fading animation custom scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
