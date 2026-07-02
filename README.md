@@ -1,18 +1,18 @@
-# 🌌 99 Names of Allah (Al-Asma-ul-Husna) — Interactive 3D Galaxy
+# 99 Names of Allah (Al-Asma-ul-Husna) — Interactive 3D Galaxy
 
 An immersive, visually stunning 3D WebGL Web Application that visualizes the 99 Beautiful Names of Allah (Al-Asma-ul-Husna) as stars in a dynamic celestial galaxy. Users can explore, memorize, listen to pronunciations, queue names in a recitation loop, and receive deep, AI-generated contemplative reflections powered by Google Gemini.
 
 ---
 
-## 📸 App Preview
+##  App Preview
 
 ![Application Interface](./app-view.png)
 
 ---
 
-## ✨ Features
+## Features
 
-### 1. 🌌 Interactive 3D Celestial Galaxy Visualization (WebGL)
+### 1. Interactive 3D Celestial Galaxy Visualization (WebGL)
 * Renders the 99 Divine Names as interactive star nodes floating in 3D space using **Three.js** and **React Three Fiber**.
 * Supports responsive, smooth gesture controls for Orbit, Pan, and Zoom (drag to rotate, scroll/pinch to zoom, double-click to view node).
 * 6 distinct **Celestial Architectures (Formations)** to reorganize the layout of the stars dynamically:
@@ -23,7 +23,7 @@ An immersive, visually stunning 3D WebGL Web Application that visualizes the 99 
   * **Supernova**: An explosive outer-expanding constellation.
   * **Infinity**: The double-loop geometry of the infinity symbol.
 
-### 2. 🎨 Premium Celestial Aesthetics & Themes
+### 2.  Premium Celestial Aesthetics & Themes
 * 6 curated theme palettes with custom glow maps, stars, and atmospheric background gradients:
   * **Slate**: Deep cosmic space slate with cool sky-blue accents.
   * **Gold**: Warm sacred desert theme with shimmering golden highlights.
@@ -33,26 +33,26 @@ An immersive, visually stunning 3D WebGL Web Application that visualizes the 99 
   * **Nebula**: Vibrant cosmic cyberpunk violet and indigo fields.
 * **Zen Mode**: Instant toggle to hide HUD panels, sidebars, and control desks for distraction-free contemplation of the rotating galaxy.
 
-### 3. 🧠 Contemplative Gemini AI Meditations
+### 3. Contemplative Gemini AI Meditations
 * Seamlessly integrates with **Gemini 3.5 Flash** through a secure local Express server proxy.
 * Generates bespoke, poetically elegant, and spiritually deep contemplative thoughts (strictly under 60 words) on how to internalize the qualities of each Divine Name in daily life.
 
-### 4. 🔊 Web Audio Synthesis & Speech Pronunciation
+### 4. Web Audio Synthesis & Speech Pronunciation
 * **Ambient Drones**: Generates unique Web Audio API synthesizer drone soundscapes matching each color theme.
 * **Sleep Timer**: Configure 15, 30, or 60-minute sleep timers that fade the ambient drone volume out smoothly in the final 5 seconds.
 * **Chime Harmonies**: A custom sound generator that produces celestial chiming arpeggios based on Solfeggio frequencies derived from the Name's ID.
 * **Arabic Pronunciation**: Integrates client-side Speech Synthesis (`ar-SA`) to clearly recite each name with optimized tempo (0.72x) and pitch.
 
-### 5. 📝 Progress Tracking & Memorization
+### 5.  Progress Tracking & Memorization
 * Mark names as **Favorite** or **Memorized/Completed**.
 * **Memorization Tracker**: Tracks exploration coverage and completion percentages.
 * **Certificate of Completion**: Awarded with a high-fidelity downloadable visual certificate when all 99 names are marked as completed.
 
-### 6. 🔄 Recitation Loop Playlist Queue
+### 6.  Recitation Loop Playlist Queue
 * Queue custom playlists of names to play in an automatic sequence (ideal for passive listening, learning, and memorization).
 * Load presets: All Names, Favorites, or specific attribute categories.
 
-### 7. 📶 Cloud & Offline Sync (Firebase + Local Fallback)
+### 7.  Cloud & Offline Sync (Firebase + Local Fallback)
 * Supports full cloud sync via Firebase Authentication (Email/Password or Guest/Anonymous account creation).
 * Saves checklists and favorite lists in Cloud Firestore, with an automatic local-storage fallback and synchronization merger upon logging back online.
 
@@ -191,7 +191,7 @@ service cloud.firestore {
 
 ---
 
-## 🤖 Gemini AI Reflections Configuration
+## Gemini AI Reflections Configuration
 
 Meditative thoughts are requested from the client and processed on the backend Express server via the `server.ts` proxy endpoint (`POST /api/gemini/meditation`).
 1. When a user clicks **"Request Contemplative Reflection"** on a Name's detail page, a fetch request is dispatched to `/api/gemini/meditation`.
@@ -210,4 +210,3 @@ Ensure your `GEMINI_API_KEY` in `.env.local` is correct to prevent reflection er
 * **Express & TSX**: Node development backend API proxying.
 * **Google Gemini AI SDK**: Reflective quote generation.
 * **Firebase (Auth & Firestore)**: Progress database and state synchronizer.
-# 99-names-of-allah-3d-galaxy
