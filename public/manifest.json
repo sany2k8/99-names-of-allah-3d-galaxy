@@ -1,0 +1,22 @@
+{
+  "short_name": "Asma-ul-Husna",
+  "name": "99 Names of Allah 3D Galaxy",
+  "description": "An immersive 3D space galaxy web application showcasing the 99 Names of Allah (Asma-ul-Husna).",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/cosmic/192/allah.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://img.icons8.com/cosmic/512/allah.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "display": "standalone",
+  "orientation": "portrait"
+}

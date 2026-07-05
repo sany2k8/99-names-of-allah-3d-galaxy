@@ -45,6 +45,24 @@
   border: 1px solid rgba(139, 92, 246, 0.15);
 }
 
+.sapphire-glass-panel {
+  background: rgba(2, 6, 18, 0.9);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.amber-glass-panel {
+  background: rgba(12, 6, 2, 0.9);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.amethyst-glass-panel {
+  background: rgba(8, 2, 12, 0.9);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+
 /* Beautiful fading animation custom scrollbar */
 ::-webkit-scrollbar {
   width: 5px;
@@ -60,3 +78,98 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* Custom scrollbar coloring per selected celestial theme */
+.gold-glass-panel ::-webkit-scrollbar-thumb {
+  background: rgba(245, 158, 11, 0.25);
+}
+.gold-glass-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.45);
+}
+
+.emerald-glass-panel ::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.25);
+}
+.emerald-glass-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.45);
+}
+
+.rose-glass-panel ::-webkit-scrollbar-thumb {
+  background: rgba(217, 70, 239, 0.25);
+}
+.rose-glass-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(217, 70, 239, 0.45);
+}
+
+.ruby-glass-panel ::-webkit-scrollbar-thumb {
+  background: rgba(239, 68, 68, 0.25);
+}
+.ruby-glass-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(239, 68, 68, 0.45);
+}
+
+.nebula-glass-panel ::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.25);
+}
+.nebula-glass-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.45);
+}
+
+.sapphire-glass-panel ::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.25);
+}
+.sapphire-glass-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.45);
+}
+
+.amber-glass-panel ::-webkit-scrollbar-thumb {
+  background: rgba(245, 158, 11, 0.25);
+}
+.amber-glass-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.45);
+}
+
+.amethyst-glass-panel ::-webkit-scrollbar-thumb {
+  background: rgba(168, 85, 247, 0.25);
+}
+.amethyst-glass-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 85, 247, 0.45);
+}
+
+/* Global App Theme Modes */
+.light-glass-panel {
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+.light-glass-panel ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+}
+.light-glass-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.midnight-glass-panel {
+  background: rgba(8, 12, 32, 0.9);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+.midnight-glass-panel ::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.25);
+}
+.midnight-glass-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.45);
+}
+
+.sepia-glass-panel {
+  background: rgba(253, 246, 227, 0.94);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(139, 92, 26, 0.2);
+}
+.sepia-glass-panel ::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 26, 0.15);
+}
+.sepia-glass-panel ::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 26, 0.3);
+}
+

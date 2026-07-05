@@ -11,11 +11,18 @@ interface GalaxyCanvasProps {
   searchQuery: string;
   selectedCategory: string;
   filterMode: 'all' | 'favorites' | 'completed';
-  visualizationType: 'spiral' | 'nebula' | 'cluster' | 'wave' | 'supernova' | 'infinity';
-  theme: 'slate' | 'gold' | 'emerald' | 'rose' | 'ruby' | 'nebula';
+  visualizationType: 'spiral' | 'nebula' | 'cluster' | 'wave' | 'supernova' | 'infinity' | 'galaxy' | 'pulsar' | 'aurora';
+  theme: 'slate' | 'gold' | 'emerald' | 'rose' | 'ruby' | 'nebula' | 'sapphire' | 'amber' | 'amethyst';
+  galaxyType: 'andromeda' | 'milkyway' | 'orion' | 'cosmicweb' | 'blackhole' | 'cluster' | 'pulsar' | 'supernova' | 'solarwind';
 }
 
-export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
+export interface GalaxyCanvasRef {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  resetZoom: () => void;
+}
+
+export const GalaxyCanvas = React.forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(({
   selectedId,
   onSelectName,
   favorites,
@@ -25,10 +32,17 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
   filterMode,
   visualizationType,
   theme,
-}) => {
+  galaxyType,
+}, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameIdRef = useRef<number | null>(null);
+
+  React.useImperativeHandle(ref, () => ({
+    zoomIn: () => handleZoom(0.8),
+    zoomOut: () => handleZoom(1.25),
+    resetZoom: handleResetZoom,
+  }));
 
   // Keep refs of ThreeJS elements so we can dynamically animate camera/lookAt targets
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -52,7 +66,7 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
   const filteredNamesRef = useRef<NameOfAllah[]>([]);
   const selectedIdRef = useRef<number | null>(selectedId);
   const hoveredIdRef = useRef<number | null>(null);
-  const themeRef = useRef<'slate' | 'gold' | 'emerald' | 'rose' | 'ruby' | 'nebula'>(theme);
+  const themeRef = useRef<'slate' | 'gold' | 'emerald' | 'rose' | 'ruby' | 'nebula' | 'sapphire' | 'amber' | 'amethyst'>(theme);
   const searchQueryRef = useRef<string>(searchQuery);
 
   useEffect(() => {
@@ -138,6 +152,36 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
         const y = scale * Math.sin(2 * t) / 1.8;
         const z = Math.sin(t) * 4;
         posList.push(new THREE.Vector3(x, y, z));
+      } else if (visualizationType === 'galaxy') {
+        const arm = i % 2;
+        const r = 2.0 + Math.pow(i, 0.72) * 1.5;
+        const theta = r * 0.45 + (arm * Math.PI);
+        const x = r * Math.cos(theta);
+        const z = r * Math.sin(theta);
+        const y = (Math.random() - 0.5) * 0.4;
+        posList.push(new THREE.Vector3(x, y, z));
+      } else if (visualizationType === 'pulsar') {
+        const isBeam = i % 5 === 0;
+        if (isBeam) {
+          const direction = i % 2 === 0 ? 1 : -1;
+          const y = direction * (1 + (i / 99) * 12);
+          const x = (Math.random() - 0.5) * 0.3;
+          const z = (Math.random() - 0.5) * 0.3;
+          posList.push(new THREE.Vector3(x, y, z));
+        } else {
+          const theta = (i / 99) * 2 * Math.PI * 3;
+          const r = 3 + (i / 99) * 10;
+          const x = r * Math.cos(theta);
+          const z = r * Math.sin(theta);
+          const y = (Math.random() - 0.5) * 0.5;
+          posList.push(new THREE.Vector3(x, y, z));
+        }
+      } else if (visualizationType === 'aurora') {
+        const t = (i / 99) * 2 * Math.PI * 2;
+        const x = (i - 49.5) * 0.45;
+        const y = Math.sin(t) * 3 + Math.cos(t * 0.5) * 1.5;
+        const z = Math.sin(t * 0.5) * 6;
+        posList.push(new THREE.Vector3(x, y, z));
       }
     }
     namePositions.current = posList;
@@ -205,6 +249,9 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
     else if (theme === 'rose') clearColorVal = 0x0a0208;
     else if (theme === 'ruby') clearColorVal = 0x0b0101;
     else if (theme === 'nebula') clearColorVal = 0x03020a;
+    else if (theme === 'sapphire') clearColorVal = 0x010515;
+    else if (theme === 'amber') clearColorVal = 0x0c0602;
+    else if (theme === 'amethyst') clearColorVal = 0x08020c;
 
     scene.fog = new THREE.FogExp2(clearColorVal, 0.012);
     sceneRef.current = scene;
@@ -219,14 +266,24 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
       canvas: canvasRef.current,
       antialias: true,
       powerPreference: "high-performance",
+      alpha: true, // Allow transparent background for beautiful CSS backdrop color transitions
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setClearColor(clearColorVal, 1);
+    renderer.setClearColor(clearColorVal, 0); // 0 alpha makes background transparent, allowing CSS color transition
     rendererRef.current = renderer;
 
     // 4. Lights
-    const ambientLightIntensity = theme === 'gold' ? 0.45 : theme === 'emerald' ? 0.35 : theme === 'rose' ? 0.35 : theme === 'ruby' ? 0.35 : theme === 'nebula' ? 0.38 : 0.3;
+    const ambientLightIntensity = 
+      theme === 'gold' ? 0.45 : 
+      theme === 'emerald' ? 0.35 : 
+      theme === 'rose' ? 0.35 : 
+      theme === 'ruby' ? 0.35 : 
+      theme === 'nebula' ? 0.38 : 
+      theme === 'sapphire' ? 0.35 :
+      theme === 'amber' ? 0.45 :
+      theme === 'amethyst' ? 0.38 : 
+      0.3;
     const ambientLight = new THREE.AmbientLight(0xffffff, ambientLightIntensity);
     scene.add(ambientLight);
 
@@ -236,6 +293,9 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
     else if (theme === 'rose') coreLightColor = 0xff75a0;
     else if (theme === 'ruby') coreLightColor = 0xef4444;
     else if (theme === 'nebula') coreLightColor = 0xd946ef;
+    else if (theme === 'sapphire') coreLightColor = 0x3b82f6;
+    else if (theme === 'amber') coreLightColor = 0xf97316;
+    else if (theme === 'amethyst') coreLightColor = 0xa855f7;
 
     const coreLight = new THREE.PointLight(coreLightColor, 4, 30);
     coreLight.position.set(0, 0, 0);
@@ -284,13 +344,31 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
       colorArm2 = new THREE.Color(0x3b82f6);
       colorDust = new THREE.Color(0x1e1b4b);
       colorFlame = new THREE.Color(0x8b5cf6);
+    } else if (theme === 'sapphire') {
+      colorCore = new THREE.Color(0xe0f2fe);
+      colorArm1 = new THREE.Color(0x38bdf8);
+      colorArm2 = new THREE.Color(0x1d4ed8);
+      colorDust = new THREE.Color(0x030712);
+      colorFlame = new THREE.Color(0x60a5fa);
+    } else if (theme === 'amber') {
+      colorCore = new THREE.Color(0xfff7ed);
+      colorArm1 = new THREE.Color(0xfb923c);
+      colorArm2 = new THREE.Color(0xc2410c);
+      colorDust = new THREE.Color(0x431407);
+      colorFlame = new THREE.Color(0xfacc15);
+    } else if (theme === 'amethyst') {
+      colorCore = new THREE.Color(0xfaf5ff);
+      colorArm1 = new THREE.Color(0xd8b4fe);
+      colorArm2 = new THREE.Color(0x7e22ce);
+      colorDust = new THREE.Color(0x1e1b4b);
+      colorFlame = new THREE.Color(0xc084fc);
     }
 
     for (let i = 0; i < starCount; i++) {
       let x = 0, y = 0, z = 0;
       let mixColor = colorDust;
 
-      if (visualizationType === 'spiral') {
+      if (galaxyType === 'andromeda') {
         const r = Math.pow(Math.random(), 2.2) * 35;
         const armIndex = i % 3;
         const armAngle = (armIndex * 2 * Math.PI) / 3;
@@ -312,7 +390,7 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
         } else {
           mixColor = colorDust.clone().lerp(colorCore, (r - 4) / 31);
         }
-      } else if (visualizationType === 'nebula') {
+      } else if (galaxyType === 'orion') {
         const theta = Math.random() * 2 * Math.PI;
         const r = 12 + Math.pow(Math.random(), 0.5) * 6;
         const spreadY = (Math.random() - 0.5) * 4;
@@ -328,7 +406,7 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
         } else {
           mixColor = colorArm2.clone().lerp(colorDust, ratio);
         }
-      } else if (visualizationType === 'cluster') {
+      } else if (galaxyType === 'cluster') {
         const u = Math.random();
         const v = Math.random();
         const theta = u * 2.0 * Math.PI;
@@ -344,25 +422,23 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
         } else {
           mixColor = colorFlame.clone().lerp(colorDust, (r - 5) / 17);
         }
-      } else if (visualizationType === 'wave') {
-        const t = (i / starCount) * 40 - 20;
-        const angle = t * 0.8;
-        const spreadX = (Math.random() - 0.5) * 1.0;
-        const spreadY = (Math.random() - 0.5) * 2.0;
-        const spreadZ = (Math.random() - 0.5) * 2.0;
+      } else if (galaxyType === 'blackhole') {
+        const r = 3.5 + Math.pow(Math.random(), 2.0) * 16.5;
+        const theta = Math.random() * 2 * Math.PI + (r * 0.8);
+        const spreadY = (Math.random() - 0.5) * (0.05 * r);
+        const spreadX = (Math.random() - 0.5) * 0.3;
+        const spreadZ = (Math.random() - 0.5) * 0.3;
 
-        x = t * 1.2 + spreadX;
-        y = Math.sin(angle) * 6 + spreadY;
-        z = Math.cos(angle) * 6 + spreadZ;
+        x = r * Math.cos(theta) + spreadX;
+        z = r * Math.sin(theta) + spreadZ;
+        y = spreadY;
 
-        const ratio = (t + 20) / 40;
-        if (i % 2 === 0) {
-          mixColor = colorArm1.clone().lerp(colorDust, ratio);
+        if (r < 6) {
+          mixColor = colorFlame.clone().lerp(colorCore, (r - 3.5) / 2.5);
         } else {
-          mixColor = colorArm2.clone().lerp(colorDust, 1 - ratio);
+          mixColor = colorCore.clone().lerp(colorDust, (r - 6) / 14);
         }
-      } else if (visualizationType === 'supernova') {
-        // Explosive radial particles stretching from core
+      } else if (galaxyType === 'supernova') {
         const theta = Math.random() * 2 * Math.PI;
         const phi = Math.acos((Math.random() * 2) - 1);
         const r = Math.pow(Math.random(), 2.5) * 38;
@@ -376,13 +452,56 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
         } else {
           mixColor = colorFlame.clone().lerp(colorDust, (r - 6) / 32);
         }
-      } else if (visualizationType === 'infinity') {
-        // Particles form a ribbon wrapping around double-loop infinity symbol
-        const t = (i / starCount) * 2 * Math.PI * 8; // spiral wraps
+      } else if (galaxyType === 'cosmicweb') {
+        const t = (i / starCount) * 2 * Math.PI * 8;
         const scale = 14 + (Math.random() - 0.5) * 2.5;
         x = scale * Math.cos(t) + (Math.random() - 0.5) * 1.2;
         y = (scale * Math.sin(2 * t) / 1.8) + (Math.random() - 0.5) * 1.2;
         z = (Math.sin(t) * 4) + (Math.random() - 0.5) * 1.2;
+
+        const ratio = Math.abs(Math.sin(t));
+        mixColor = colorArm1.clone().lerp(colorArm2, ratio);
+      } else if (galaxyType === 'milkyway') {
+        const r = Math.pow(Math.random(), 2.0) * 32;
+        const armIndex = i % 2;
+        const armAngle = armIndex * Math.PI;
+        const theta = r * 0.45 + armAngle;
+        const spreadX = (Math.random() - 0.5) * (1.2 + r * 0.1);
+        const spreadY = (Math.random() - 0.5) * (0.5 + r * 0.05);
+        const spreadZ = (Math.random() - 0.5) * (1.2 + r * 0.1);
+
+        x = r * Math.cos(theta) + spreadX;
+        y = spreadY;
+        z = r * Math.sin(theta) + spreadZ;
+
+        const ratio = r / 32;
+        mixColor = colorCore.clone().lerp(colorArm1, ratio);
+      } else if (galaxyType === 'pulsar') {
+        const isBeam = i % 4 === 0;
+        if (isBeam) {
+          const direction = Math.random() > 0.5 ? 1 : -1;
+          const r = Math.random() * 24;
+          y = direction * r;
+          x = (Math.random() - 0.5) * (0.3 + r * 0.04);
+          z = (Math.random() - 0.5) * (0.3 + r * 0.04);
+          mixColor = colorFlame.clone().lerp(colorCore, r / 24);
+        } else {
+          const theta = Math.random() * 2 * Math.PI;
+          const r = Math.pow(Math.random(), 1.5) * 22;
+          x = r * Math.cos(theta);
+          z = r * Math.sin(theta);
+          y = (Math.random() - 0.5) * (0.6 + r * 0.05);
+          mixColor = colorArm2.clone().lerp(colorDust, r / 22);
+        }
+      } else if (galaxyType === 'solarwind') {
+        const t = (i / starCount) * 4 * Math.PI * 2;
+        const spreadX = (Math.random() - 0.5) * 1.5;
+        const spreadY = (Math.random() - 0.5) * 3.5;
+        const spreadZ = (Math.random() - 0.5) * 2.0;
+
+        x = (t - 4 * Math.PI) * 2.2 + spreadX;
+        y = Math.sin(t) * 3.5 + Math.cos(t * 0.5) * 2.0 + spreadY;
+        z = Math.sin(t * 0.5) * 6.5 + spreadZ;
 
         const ratio = Math.abs(Math.sin(t));
         mixColor = colorArm1.clone().lerp(colorArm2, ratio);
@@ -467,6 +586,60 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
       ring.position.copy(pos);
       ring.lookAt(0, 10, 0); // Face upwards
       nameNodesGroup.add(ring);
+    });
+
+    // 6b. Build interactive 3D Category Constellation Lines on Completion
+    const categoriesList = ['Mercy', 'Majesty', 'Wisdom', 'Power', 'Justice', 'Protection', 'Generosity'];
+    const categoryColors: Record<string, number> = {
+      Mercy: 0x81c784,      // Emerald Green
+      Majesty: 0xffb74d,    // Warm Amber/Gold
+      Wisdom: 0xa855f7,     // Velvet Purple
+      Power: 0xef4444,      // Crimson Red
+      Justice: 0xf97316,    // Vibrant Orange
+      Protection: 0x06b6d4, // Bright Teal
+      Generosity: 0xf59e0b, // Gold
+    };
+
+    categoriesList.forEach(cat => {
+      const catNames = namesOfAllah.filter(n => n.category === cat);
+      const allCompleted = catNames.length > 0 && catNames.every(n => completed.includes(n.id));
+      if (allCompleted) {
+        const points: THREE.Vector3[] = [];
+        catNames.forEach(item => {
+          const nameIdx = namesOfAllah.findIndex(n => n.id === item.id);
+          const pos = namePositions.current[nameIdx];
+          if (pos) {
+            points.push(pos.clone());
+          }
+        });
+
+        if (points.length > 1) {
+          points.push(points[0].clone()); // Close the constellation ring
+
+          const constellationGeom = new THREE.BufferGeometry().setFromPoints(points);
+          
+          // Ethereal core glowing constellation line
+          const coreLineMat = new THREE.LineBasicMaterial({
+            color: categoryColors[cat] || 0xffffff,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+          });
+          const constellationLine = new THREE.Line(constellationGeom, coreLineMat);
+          nameNodesGroup.add(constellationLine);
+
+          // Ethereal outer halo glow line
+          const outerLineMat = new THREE.LineBasicMaterial({
+            color: categoryColors[cat] || 0xffffff,
+            transparent: true,
+            opacity: 0.25,
+            blending: THREE.AdditiveBlending,
+          });
+          const outerConstellationLine = new THREE.Line(constellationGeom, outerLineMat);
+          outerConstellationLine.scale.set(1.015, 1.015, 1.015);
+          nameNodesGroup.add(outerConstellationLine);
+        }
+      }
     });
 
     scene.add(nameNodesGroup);
@@ -588,6 +761,10 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
       const delta = clock.getDelta();
       const time = clock.getElapsedTime();
 
+      // Real-time audio reactive pulsing for stars
+      const audioLevel = audio.getAudioLevel();
+      starMaterial.size = 0.35 * (1.0 + audioLevel * 2.5);
+
       // Rotate galaxy and particles gently
       const rotationSpeed = 0.04;
       starParticles.rotation.y = rotationAngle.current + time * rotationSpeed;
@@ -612,18 +789,21 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
       if (intersects.length > 0) {
         const hitObj = intersects[0].object as THREE.Mesh;
         currentHovered = hitObj.userData.id;
-        
-        // Scale up hovered sphere slightly
-        hitObj.scale.set(1.4, 1.4, 1.4);
       }
 
-      // Restore sizes
+      // Restore sizes and apply audio-reactive scaling
       nameSpheres.forEach(sphere => {
-        if (sphere.userData.id !== currentHovered && sphere.userData.id !== selectedIdRef.current) {
+        const isHovered = sphere.userData.id === currentHovered;
+        const isSelected = sphere.userData.id === selectedIdRef.current;
+
+        if (!isHovered && !isSelected) {
           sphere.scale.set(1.0, 1.0, 1.0);
-        } else if (sphere.userData.id === selectedIdRef.current) {
-          // Extra glow for active selected name
-          sphere.scale.set(1.6, 1.6, 1.6);
+        } else if (isSelected) {
+          // Selected name node pulses with audio
+          const pulse = 1.6 + audioLevel * 0.8;
+          sphere.scale.set(pulse, pulse, pulse);
+        } else if (isHovered) {
+          sphere.scale.set(1.4, 1.4, 1.4);
         }
       });
 
@@ -728,7 +908,7 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
       sphereGeom.dispose();
       starTexture.dispose();
     };
-  }, [visualizationType, theme]);
+  }, [visualizationType, theme, completed, favorites, galaxyType]);
 
   // Handle Resize
   useEffect(() => {
@@ -879,8 +1059,17 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
     };
   }, []);
 
+  const themeBgClasses = {
+    slate: 'bg-[#020205]',
+    gold: 'bg-[#0a0805]',
+    emerald: 'bg-[#010704]',
+    rose: 'bg-[#0a0208]',
+    ruby: 'bg-[#0b0101]',
+    nebula: 'bg-[#03020a]',
+  };
+
   return (
-    <div id="galaxy-viewport" ref={containerRef} className="relative w-full h-full bg-[#020205] overflow-hidden select-none cursor-grab active:cursor-grabbing">
+    <div id="galaxy-viewport" ref={containerRef} className={`relative w-full h-full ${themeBgClasses[theme] || 'bg-[#020205]'} transition-colors duration-1000 ease-in-out overflow-hidden select-none cursor-grab active:cursor-grabbing`}>
       <canvas ref={canvasRef} className="w-full h-full absolute inset-0 z-0" />
       <canvas ref={trailCanvasRef} className="w-full h-full absolute inset-0 z-[1] pointer-events-none" />
 
@@ -936,42 +1125,7 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
         })}
       </div>
 
-      {/* Floating Zoom Controls */}
-      <div className="absolute right-6 bottom-20 z-20 flex flex-col gap-2 pointer-events-auto">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            audio.playSparkle('click');
-            handleZoom(0.8); // Zoom In (closer)
-          }}
-          className="w-10 h-10 rounded-xl bg-slate-950/80 hover:bg-slate-900 border border-white/10 hover:border-amber-500/40 text-amber-200 flex items-center justify-center transition-all cursor-pointer shadow-2xl active:scale-95 font-semibold text-lg"
-          title="Zoom In"
-        >
-          ＋
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            audio.playSparkle('click');
-            handleZoom(1.25); // Zoom Out (further)
-          }}
-          className="w-10 h-10 rounded-xl bg-slate-950/80 hover:bg-slate-900 border border-white/10 hover:border-amber-500/40 text-amber-200 flex items-center justify-center transition-all cursor-pointer shadow-2xl active:scale-95 font-semibold text-lg"
-          title="Zoom Out"
-        >
-          －
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            audio.playSparkle('click');
-            handleResetZoom();
-          }}
-          className="w-10 h-10 rounded-xl bg-slate-950/80 hover:bg-slate-900 border border-white/10 hover:border-amber-500/40 text-amber-200 flex items-center justify-center transition-all cursor-pointer shadow-2xl active:scale-95 font-mono text-[8px] uppercase tracking-wider font-bold"
-          title="Reset View"
-        >
-          Reset
-        </button>
-      </div>
+
 
       {/* Floating Space dust instructions */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none bg-slate-950/40 backdrop-blur-sm border border-white/5 rounded-full px-4 py-1 text-xs text-slate-400 font-mono tracking-wider flex items-center gap-2">
@@ -981,4 +1135,4 @@ export const GalaxyCanvas: React.FC<GalaxyCanvasProps> = ({
       </div>
     </div>
   );
-};
+});

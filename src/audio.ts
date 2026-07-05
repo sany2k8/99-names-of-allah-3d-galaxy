@@ -5,6 +5,9 @@ class AudioEngine {
   private oscillators: { osc: OscillatorNode; gain: GainNode }[] = [];
   private isPlayingDrone = false;
   private volume = 0.4;
+  private analyser: AnalyserNode | null = null;
+  public vocalAudio: HTMLAudioElement | null = null;
+  private vocalSource: MediaElementAudioSourceNode | null = null;
 
   private init() {
     if (this.ctx) return;
@@ -14,7 +17,23 @@ class AudioEngine {
     this.ctx = new AudioContextClass();
     this.masterGain = this.ctx.createGain();
     this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
-    this.masterGain.connect(this.ctx.destination);
+    
+    // Initialize Real-time Analyser for Audio-Reactive Stars and Galaxies
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 64; // Small size for responsive, organic pulsing
+    this.masterGain.connect(this.analyser);
+    this.analyser.connect(this.ctx.destination);
+  }
+
+  public getAudioLevel(): number {
+    if (!this.ctx || !this.analyser) return 0;
+    const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+    this.analyser.getByteFrequencyData(dataArray);
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      sum += dataArray[i];
+    }
+    return sum / dataArray.length / 255; // Normalize to 0.0 - 1.0 range
   }
 
   public setVolume(val: number) {
@@ -99,6 +118,27 @@ class AudioEngine {
       filterQ = 1.8;
       lfoRateBase = 0.12; // slightly more shimmering wave speed
       lfoGainVal = 0.09;
+    } else if (theme === 'sapphire') { // Sapphire Blue
+      baseFreqs = [82.4, 123.6, 164.8, 247.2]; // Oceanic deep blue tuning
+      waveTypes = ['sine', 'triangle', 'sine', 'sine'];
+      filterFreq = 300;
+      filterQ = 2.0;
+      lfoRateBase = 0.06;
+      lfoGainVal = 0.08;
+    } else if (theme === 'amber') { // Sunset Amber
+      baseFreqs = [116.5, 174.8, 233.1, 349.6]; // Warm resonance
+      waveTypes = ['sine', 'sine', 'triangle', 'sine'];
+      filterFreq = 380;
+      filterQ = 1.3;
+      lfoRateBase = 0.05;
+      lfoGainVal = 0.07;
+    } else if (theme === 'amethyst') { // Purple Amethyst
+      baseFreqs = [103.8, 155.7, 207.6, 311.3]; // Spiritual velvet drone
+      waveTypes = ['sine', 'triangle', 'sine', 'triangle'];
+      filterFreq = 420;
+      filterQ = 1.6;
+      lfoRateBase = 0.08;
+      lfoGainVal = 0.08;
     }
 
     baseFreqs.forEach((freq, idx) => {
@@ -231,7 +271,7 @@ class AudioEngine {
     });
   }
 
-  public playNameAudio(transliteration: string, nameAr: string, id: number) {
+  public playNameAudio(transliteration: string, nameAr: string, id: number, style: 'studio' | 'celestial' = 'celestial') {
     this.init();
     if (!this.ctx) return;
 
@@ -241,78 +281,113 @@ class AudioEngine {
 
     const now = this.ctx.currentTime;
 
-    // 1. Celestial sacred chime arpeggio based on name ID
-    const solfeggio = [396.0, 417.0, 528.0, 639.0, 741.0, 852.0, 963.0, 1056.0, 1278.0];
-    const note1 = solfeggio[id % solfeggio.length];
-    const note2 = solfeggio[(id + 2) % solfeggio.length];
-    const note3 = solfeggio[(id + 4) % solfeggio.length];
-    const melody = [note1, note2, note3];
-    const delayStep = 0.24;
-
-    const chimeGain = this.ctx.createGain();
-    chimeGain.gain.setValueAtTime(0, now);
-    chimeGain.gain.linearRampToValueAtTime(0.18, now + 0.05);
-    chimeGain.gain.exponentialRampToValueAtTime(0.001, now + 2.5);
-    chimeGain.connect(this.masterGain!);
-
-    const delay = this.ctx.createDelay();
-    delay.delayTime.setValueAtTime(0.32, now);
-    const delayFeedback = this.ctx.createGain();
-    delayFeedback.gain.setValueAtTime(0.42, now);
-    
-    chimeGain.connect(delay);
-    delay.connect(delayFeedback);
-    delayFeedback.connect(delay);
-    delayFeedback.connect(this.masterGain!);
-
-    melody.forEach((freq, idx) => {
-      if (!this.ctx) return;
-      const oscTime = now + idx * delayStep;
-      
-      const osc = this.ctx.createOscillator();
-      const oscGain = this.ctx.createGain();
-      
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, oscTime);
-      
-      oscGain.gain.setValueAtTime(0, oscTime);
-      oscGain.gain.linearRampToValueAtTime(0.15, oscTime + 0.02);
-      oscGain.gain.exponentialRampToValueAtTime(0.001, oscTime + 1.2);
-      
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(1100, oscTime);
-      
-      osc.connect(oscGain);
-      oscGain.connect(filter);
-      filter.connect(chimeGain);
-      
-      osc.start(oscTime);
-      osc.stop(oscTime + 2.0);
-    });
-
-    // 2. Pronounce Arabic name using client-side SpeechSynthesis
-    if ('speechSynthesis' in window) {
+    // Stop any currently playing studio vocal
+    if (this.vocalAudio) {
       try {
-        window.speechSynthesis.cancel();
-        
-        const utterance = new SpeechSynthesisUtterance(nameAr);
-        utterance.lang = 'ar-SA';
-        utterance.rate = 0.72; // slow and clear
-        utterance.pitch = 0.92; // deep, contemplative
-        
-        // Find best Arabic voice
-        const voices = window.speechSynthesis.getVoices();
-        const arVoice = voices.find(v => v.lang.startsWith('ar'));
-        if (arVoice) {
-          utterance.voice = arVoice;
+        this.vocalAudio.pause();
+        this.vocalAudio.currentTime = 0;
+      } catch (e) {}
+    }
+
+    if (style === 'studio') {
+      // Create audio element if not already existing
+      if (!this.vocalAudio) {
+        this.vocalAudio = new Audio();
+        this.vocalAudio.crossOrigin = "anonymous";
+      }
+
+      // We use the verified GitHub CDN raw url
+      this.vocalAudio.src = `https://raw.githubusercontent.com/hasanm/99-names-of-allah-audio/master/audio/${id}.mp3`;
+
+      // Connect vocalAudio to MasterGain so it goes through Analyser Node for Audio-Reactive stars
+      if (!this.vocalSource && this.ctx && this.masterGain) {
+        try {
+          this.vocalSource = this.ctx.createMediaElementSource(this.vocalAudio);
+          this.vocalSource.connect(this.masterGain);
+        } catch (err) {
+          console.warn("MediaElementAudioSourceNode creation failed:", err);
         }
+      }
+
+      this.vocalAudio.play().catch(err => {
+        console.warn("Studio vocal failed, falling back to Celestial Chanting:", err);
+        // Failover fallback to Celestial style
+        this.playNameAudio(transliteration, nameAr, id, 'celestial');
+      });
+    } else {
+      // 1. Celestial sacred chime arpeggio based on name ID
+      const solfeggio = [396.0, 417.0, 528.0, 639.0, 741.0, 852.0, 963.0, 1056.0, 1278.0];
+      const note1 = solfeggio[id % solfeggio.length];
+      const note2 = solfeggio[(id + 2) % solfeggio.length];
+      const note3 = solfeggio[(id + 4) % solfeggio.length];
+      const melody = [note1, note2, note3];
+      const delayStep = 0.24;
+
+      const chimeGain = this.ctx.createGain();
+      chimeGain.gain.setValueAtTime(0, now);
+      chimeGain.gain.linearRampToValueAtTime(0.18, now + 0.05);
+      chimeGain.gain.exponentialRampToValueAtTime(0.001, now + 2.5);
+      chimeGain.connect(this.masterGain!);
+
+      const delay = this.ctx.createDelay();
+      delay.delayTime.setValueAtTime(0.32, now);
+      const delayFeedback = this.ctx.createGain();
+      delayFeedback.gain.setValueAtTime(0.42, now);
+      
+      chimeGain.connect(delay);
+      delay.connect(delayFeedback);
+      delayFeedback.connect(delay);
+      delayFeedback.connect(this.masterGain!);
+
+      melody.forEach((freq, idx) => {
+        if (!this.ctx) return;
+        const oscTime = now + idx * delayStep;
         
-        setTimeout(() => {
-          window.speechSynthesis.speak(utterance);
-        }, 300);
-      } catch (err) {
-        console.warn('Speech synthesis failed:', err);
+        const osc = this.ctx.createOscillator();
+        const oscGain = this.ctx.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, oscTime);
+        
+        oscGain.gain.setValueAtTime(0, oscTime);
+        oscGain.gain.linearRampToValueAtTime(0.15, oscTime + 0.02);
+        oscGain.gain.exponentialRampToValueAtTime(0.001, oscTime + 1.2);
+        
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1100, oscTime);
+        
+        osc.connect(oscGain);
+        oscGain.connect(filter);
+        filter.connect(chimeGain);
+        
+        osc.start(oscTime);
+        osc.stop(oscTime + 2.0);
+      });
+
+      // 2. Pronounce Arabic name using client-side SpeechSynthesis
+      if ('speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+          
+          const utterance = new SpeechSynthesisUtterance(nameAr);
+          utterance.lang = 'ar-SA';
+          utterance.rate = 0.72; // slow and clear
+          utterance.pitch = 0.92; // deep, contemplative
+          
+          // Find best Arabic voice
+          const voices = window.speechSynthesis.getVoices();
+          const arVoice = voices.find(v => v.lang.startsWith('ar'));
+          if (arVoice) {
+            utterance.voice = arVoice;
+          }
+          
+          setTimeout(() => {
+            window.speechSynthesis.speak(utterance);
+          }, 300);
+        } catch (err) {
+          console.warn('Speech synthesis failed:', err);
+        }
       }
     }
   }

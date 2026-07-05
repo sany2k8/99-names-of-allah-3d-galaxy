@@ -68,7 +68,56 @@ Requirements:
   }
 });
 
-// 2. Health check route
+// 2. API Route for dynamic multi-lingual translation
+app.post("/api/gemini/translate", async (req, res) => {
+  try {
+    const { nameId, arabicName, transliteration, english, explanation, benefits, targetLanguage } = req.body;
+
+    if (!transliteration || !arabicName || !targetLanguage) {
+      return res.status(400).json({ error: "Missing required properties (transliteration, arabicName, targetLanguage)." });
+    }
+
+    if (!ai) {
+      return res.status(500).json({ 
+        error: "Gemini API Client is not configured. Please ensure your GEMINI_API_KEY is saved in Settings > Secrets." 
+      });
+    }
+
+    const prompt = `You are an expert Islamic theologian, scholar, and linguist.
+Please translate the following fields of the Divine Name of Allah: "${transliteration} (${arabicName})" into the language: "${targetLanguage}".
+
+Fields to translate:
+1. Meaning (English): "${english}"
+2. Deep Theological Explanation (English): "${explanation}"
+3. Spiritual Benefits / Blessings (English): "${benefits}"
+
+You must provide the translation in a strict JSON format with exactly three keys: "meaning", "explanation", "benefits".
+The translations should be accurate, deeply respectful, and preserve the spiritual, theological, and peaceful tone of the original texts. Do not add any markdown, code blocks, or extra notes. Return ONLY the raw JSON string.
+
+Example structure:
+{
+  "meaning": "[translation of the meaning]",
+  "explanation": "[translation of the deep theological explanation]",
+  "benefits": "[translation of the spiritual benefits]"
+}`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    const text = response.text?.trim() || "{}";
+    res.json(JSON.parse(text));
+  } catch (error: any) {
+    console.error("Error translating name of Allah:", error);
+    res.status(500).json({ error: error?.message || "Internal Server Error during translation." });
+  }
+});
+
+// 3. Health check route
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
 });

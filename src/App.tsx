@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { 
   onAuthStateChanged, 
   User 
@@ -10,6 +11,8 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { NameOfAllah, namesOfAllah } from './namesData';
+import { getQuranReferences } from './quranData';
+import { SpiritualDashboardModal, FlashcardsModal, BadgesModal } from './components/LearningModules';
 import { GalaxyCanvas } from './components/GalaxyCanvas';
 import { AuthDialog } from './components/AuthDialog';
 import { NotificationHub } from './components/NotificationHub';
@@ -41,7 +44,16 @@ import {
   EyeOff,
   Music,
   Pause,
-  ListPlus
+  ListPlus,
+  Calendar,
+  Trophy,
+  Layers,
+  Square,
+  SkipForward,
+  SkipBack,
+  Headphones,
+  Disc,
+  Orbit
 } from 'lucide-react';
 import { PronunciationGuide } from './components/PronunciationGuide';
 import { GestureTutorial } from './components/GestureTutorial';
@@ -105,12 +117,16 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
   // App settings & view states
-  const [theme, setTheme] = useState<'slate' | 'gold' | 'emerald' | 'rose' | 'ruby' | 'nebula'>('slate');
-  const [activeRightMenu, setActiveRightMenu] = useState<'architecture' | 'theme' | null>(null);
+  const [theme, setTheme] = useState<'slate' | 'gold' | 'emerald' | 'rose' | 'ruby' | 'nebula' | 'sapphire' | 'amber' | 'amethyst'>('slate');
+  const [activeRightMenu, setActiveRightMenu] = useState<'architecture' | 'theme' | 'galaxy' | null>(null);
+  const [galaxyType, setGalaxyType] = useState<'andromeda' | 'milkyway' | 'orion' | 'cosmicweb' | 'blackhole' | 'cluster' | 'pulsar' | 'supernova' | 'solarwind'>('andromeda');
+  const galaxyCanvasRef = React.useRef<any>(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [volume, setVolume] = useState(0.4);
   const [showAuth, setShowAuth] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showThemeDropdown, setShowThemeDropdown] = useState(false);
+  const [appThemeMode, setAppThemeMode] = useState<'dark' | 'light' | 'midnight' | 'sepia'>('dark');
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   // Filtering and selection states
@@ -118,7 +134,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [filterMode, setFilterMode] = useState<'all' | 'favorites' | 'completed'>('all');
-  const [visualizationType, setVisualizationType] = useState<'spiral' | 'nebula' | 'cluster' | 'wave' | 'supernova' | 'infinity'>('spiral');
+  const [visualizationType, setVisualizationType] = useState<'spiral' | 'nebula' | 'cluster' | 'wave' | 'supernova' | 'infinity' | 'galaxy' | 'pulsar' | 'aurora'>('spiral');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   // Sleep timer and onboarding states
@@ -143,6 +159,74 @@ export default function App() {
   const [playlist, setPlaylist] = useState<number[]>([]);
   const [currentPlaylistIndex, setCurrentPlaylistIndex] = useState<number | null>(null);
   const [isPlaylistPlaying, setIsPlaylistPlaying] = useState<boolean>(false);
+  const [activeSidebarTab, setActiveSidebarTab] = useState<'directory' | 'dhikr' | 'stats'>('directory');
+
+  // Custom Wird Litany Playlists
+  const [customPlaylists, setCustomPlaylists] = useState<Array<{ id: string; name: string; nameIds: number[] }>>([
+    {
+      id: 'morning_protection',
+      name: 'Morning Protection (Daily)',
+      nameIds: [1, 2, 4, 5, 23, 24, 62] // Ar-Rahman, Ar-Rahim, Al-Quddus, As-Salam, etc.
+    },
+    {
+      id: 'hardship_relief',
+      name: 'Hardship Relief (Litany)',
+      nameIds: [12, 22, 29, 30, 31, 32, 33] // Al-Khaliq, Al-Ghaffar, Al-Fattah, etc.
+    }
+  ]);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
+
+  // Localization / Translations
+  const [selectedLanguage, setSelectedLanguage] = useState<'english' | 'bengali' | 'urdu' | 'indonesian' | 'turkish' | 'french'>('english');
+  const [translationCache, setTranslationCache] = useState<Record<number, Record<string, { meaning: string; explanation: string; benefits: string }>>>({});
+  const [translationLoading, setTranslationLoading] = useState(false);
+
+  // Tasbih Digital Counter
+  const [tasbihCount, setTasbihCount] = useState(0);
+  const [tasbihTarget, setTasbihTarget] = useState<number | 'free'>(33);
+  const [tasbihParticles, setTasbihParticles] = useState<Array<{ id: number; x: number; y: number; color: string }>>([]);
+
+  // Advanced features states
+  const [showDashboardModal, setShowDashboardModal] = useState<boolean>(false);
+  const [showFlashcardsModal, setShowFlashcardsModal] = useState<boolean>(false);
+  const [showBadgesModal, setShowBadgesModal] = useState<boolean>(false);
+  const [qariStyle, setQariStyle] = useState<'studio' | 'celestial'>('celestial');
+  const [dhikrInterval, setDhikrInterval] = useState<number>(0); // Seconds: 0, 1, 3, 5, 10
+  const [translationSyncEnabled, setTranslationSyncEnabled] = useState<boolean>(true);
+  const [activeWordIndex, setActiveWordIndex] = useState<number>(-1);
+  const [reflectionInput, setReflectionInput] = useState<string>('');
+
+  // Leitner Flashcard system box tracking: Record<nameId, boxNumber (1-5)>
+  const [leitnerBoxes, setLeitnerBoxes] = useState<Record<number, number>>({});
+  
+  // Reflection journal: Record<nameId, {text: string, timestamp: string}[]>
+  const [reflections, setReflections] = useState<Record<number, { text: string; timestamp: string }[]>>({});
+
+  // Spiritual Streaks / History heat-map data: Record<"YYYY-MM-DD", recitationCount>
+  const [recitationHistory, setRecitationHistory] = useState<Record<string, number>>({});
+
+  // Detailed recitation logs
+  const [recitationLogs, setRecitationLogs] = useState<Array<{ timestamp: string; nameId: number; nameTranslit: string }>>([]);
+
+  // Theme helper definitions
+  const isLight = appThemeMode === 'light' || appThemeMode === 'sepia';
+
+  const getGlassPanelClass = () => {
+    if (appThemeMode === 'light') return 'light-glass-panel text-slate-800 border-black/10';
+    if (appThemeMode === 'midnight') return 'midnight-glass-panel text-blue-100 border-blue-500/25';
+    if (appThemeMode === 'sepia') return 'sepia-glass-panel text-amber-950 border-amber-800/15';
+    
+    if (theme === 'gold') return 'gold-glass-panel text-[#f4ebd0] border-amber-500/30';
+    if (theme === 'emerald') return 'emerald-glass-panel text-emerald-100 border-emerald-500/30';
+    if (theme === 'rose') return 'rose-glass-panel text-rose-100 border-fuchsia-500/30';
+    if (theme === 'ruby') return 'ruby-glass-panel text-red-100 border-red-500/30';
+    if (theme === 'nebula') return 'nebula-glass-panel text-indigo-100 border-violet-500/30';
+    if (theme === 'sapphire') return 'sapphire-glass-panel text-blue-100 border-blue-500/30';
+    if (theme === 'amber') return 'amber-glass-panel text-orange-100 border-amber-600/30';
+    if (theme === 'amethyst') return 'amethyst-glass-panel text-purple-100 border-purple-500/30';
+    return 'glass-panel text-slate-100 border-white/10';
+  };
 
   // 1. Toast Notification Manager
   const triggerToast = (message: string, title: string = 'Notification') => {
@@ -158,18 +242,46 @@ export default function App() {
     const cachedFavs = localStorage.getItem('allah_names_favs');
     const cachedComp = localStorage.getItem('allah_names_comp');
     const cachedTheme = localStorage.getItem('allah_names_theme');
+    const cachedGalaxyType = localStorage.getItem('allah_names_galaxy_type');
+    const cachedLeitner = localStorage.getItem('leitner_boxes');
+    const cachedReflections = localStorage.getItem('user_reflections');
+    const cachedHistory = localStorage.getItem('recitation_history');
+    const cachedLogs = localStorage.getItem('recitation_logs');
+    const cachedPlaylists = localStorage.getItem('allah_names_custom_playlists');
+    const cachedTranslations = localStorage.getItem('allah_names_translation_cache');
 
     if (cachedFavs) setFavorites(JSON.parse(cachedFavs));
     if (cachedComp) setCompleted(JSON.parse(cachedComp));
-    if (cachedTheme && ['slate', 'gold', 'emerald', 'rose', 'ruby', 'nebula'].includes(cachedTheme)) {
+    if (cachedLeitner) setLeitnerBoxes(JSON.parse(cachedLeitner));
+    if (cachedReflections) setReflections(JSON.parse(cachedReflections));
+    if (cachedHistory) setRecitationHistory(JSON.parse(cachedHistory));
+    if (cachedLogs) setRecitationLogs(JSON.parse(cachedLogs));
+    if (cachedPlaylists) setCustomPlaylists(JSON.parse(cachedPlaylists));
+    if (cachedTranslations) setTranslationCache(JSON.parse(cachedTranslations));
+    if (cachedTheme && ['slate', 'gold', 'emerald', 'rose', 'ruby', 'nebula', 'sapphire', 'amber', 'amethyst'].includes(cachedTheme)) {
       setTheme(cachedTheme as any);
+    }
+    const cachedAppThemeMode = localStorage.getItem('app_theme_mode');
+    if (cachedAppThemeMode && ['dark', 'light', 'midnight', 'sepia'].includes(cachedAppThemeMode)) {
+      setAppThemeMode(cachedAppThemeMode as any);
+    }
+    if (cachedGalaxyType) {
+      setGalaxyType(cachedGalaxyType as any);
     }
   }, []);
 
-  // 3. Sync theme state
+  // 3. Sync theme & galaxyType state
   useEffect(() => {
     localStorage.setItem('allah_names_theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem('app_theme_mode', appThemeMode);
+  }, [appThemeMode]);
+
+  useEffect(() => {
+    localStorage.setItem('allah_names_galaxy_type', galaxyType);
+  }, [galaxyType]);
 
   // Handle selectedName updates for Explored Names and Recently Viewed tracking
   useEffect(() => {
@@ -181,6 +293,421 @@ export default function App() {
       });
     }
   }, [selectedName]);
+
+  // On-demand translations fetch & cache effect
+  useEffect(() => {
+    if (!selectedName || selectedLanguage === 'english' || selectedLanguage === 'bengali') return;
+
+    const cached = translationCache[selectedName.id]?.[selectedLanguage];
+    if (cached) return; // Already cached!
+
+    const fetchTranslation = async () => {
+      setTranslationLoading(true);
+      try {
+        const res = await fetch('/api/gemini/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nameId: selectedName.id,
+            arabicName: selectedName.name,
+            transliteration: selectedName.transliteration,
+            english: selectedName.english,
+            explanation: selectedName.explanation,
+            benefits: selectedName.benefits,
+            targetLanguage: selectedLanguage
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.meaning && data.explanation && data.benefits) {
+            setTranslationCache(prev => {
+              const updated = {
+                ...prev,
+                [selectedName.id]: {
+                  ...(prev[selectedName.id] || {}),
+                  [selectedLanguage]: {
+                    meaning: data.meaning,
+                    explanation: data.explanation,
+                    benefits: data.benefits
+                  }
+                }
+              };
+              localStorage.setItem('allah_names_translation_cache', JSON.stringify(updated));
+              return updated;
+            });
+            triggerToast(`Translated detail page successfully to ${selectedLanguage.toUpperCase()}!`, 'Dynamic Translation');
+          } else {
+            console.warn("Invalid translation response body", data);
+          }
+        } else {
+          console.error("Translation request failed status", res.status);
+        }
+      } catch (err) {
+        console.error("Translation fetch error:", err);
+      } finally {
+        setTranslationLoading(false);
+      }
+    };
+
+    fetchTranslation();
+  }, [selectedName, selectedLanguage]);
+
+  // Word-by-word synced highlighting effect for Studio audio and Simulated speech
+  useEffect(() => {
+    const vocal = audio.vocalAudio;
+    if (!vocal) return;
+
+    const handleTimeUpdate = () => {
+      if (!selectedName || !translationSyncEnabled) {
+        setActiveWordIndex(-1);
+        return;
+      }
+      const words = selectedName.english.split(' ');
+      const duration = vocal.duration || 4.5;
+      const currentTime = vocal.currentTime || 0;
+      
+      if (vocal.paused || currentTime === 0) {
+        setActiveWordIndex(-1);
+        return;
+      }
+
+      const ratio = currentTime / duration;
+      const index = Math.floor(ratio * words.length);
+      setActiveWordIndex(Math.min(index, words.length - 1));
+    };
+
+    const handleEnded = () => {
+      setActiveWordIndex(-1);
+    };
+
+    vocal.addEventListener('timeupdate', handleTimeUpdate);
+    vocal.addEventListener('ended', handleEnded);
+    vocal.addEventListener('pause', handleEnded);
+
+    return () => {
+      vocal.removeEventListener('timeupdate', handleTimeUpdate);
+      vocal.removeEventListener('ended', handleEnded);
+      vocal.removeEventListener('pause', handleEnded);
+    };
+  }, [selectedName, qariStyle, translationSyncEnabled]);
+
+  useEffect(() => {
+    if (qariStyle !== 'celestial' || !selectedName || !translationSyncEnabled) {
+      setActiveWordIndex(-1);
+      return;
+    }
+
+    const words = selectedName.english.split(' ');
+    const totalDuration = 2500; // 2.5 seconds
+    const intervalMs = totalDuration / words.length;
+
+    setActiveWordIndex(0);
+    let currentIdx = 0;
+
+    const interval = setInterval(() => {
+      currentIdx++;
+      if (currentIdx < words.length) {
+        setActiveWordIndex(currentIdx);
+      } else {
+        setActiveWordIndex(-1);
+        clearInterval(interval);
+      }
+    }, intervalMs);
+
+    return () => {
+      clearInterval(interval);
+      setActiveWordIndex(-1);
+    };
+  }, [selectedName, qariStyle, translationSyncEnabled]);
+
+  // Recitation logging & streak calculation
+  const recordRecitation = (id: number) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const targetName = namesOfAllah.find(n => n.id === id);
+    const nameTranslit = targetName ? targetName.transliteration : `Name #${id}`;
+
+    // 1. Update daily counts mapping
+    setRecitationHistory(prev => {
+      const currentCount = prev[todayStr] || 0;
+      const updated = { ...prev, [todayStr]: currentCount + 1 };
+      localStorage.setItem('recitation_history', JSON.stringify(updated));
+
+      if (auth.currentUser) {
+        const userDocRef = doc(db, 'user_data', auth.currentUser.uid);
+        setDoc(userDocRef, {
+          recitationHistory: updated,
+          updatedAt: new Date().toISOString()
+        }, { merge: true }).catch(err => console.error("Cloud history sync error:", err));
+      }
+
+      return updated;
+    });
+
+    // 2. Update detailed logs array
+    setRecitationLogs(prev => {
+      const newLog = {
+        timestamp: new Date().toISOString(),
+        nameId: id,
+        nameTranslit: nameTranslit
+      };
+      const updated = [...prev, newLog].slice(-100); // Keep last 100 entries
+      localStorage.setItem('recitation_logs', JSON.stringify(updated));
+
+      if (auth.currentUser) {
+        const userDocRef = doc(db, 'user_data', auth.currentUser.uid);
+        setDoc(userDocRef, {
+          recitationLogs: updated,
+        }, { merge: true }).catch(err => console.error("Cloud logs sync error:", err));
+      }
+
+      return updated;
+    });
+  };
+
+  // Streak calculators
+  const getStreaks = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    let currentStreak = 0;
+    let checkDate = new Date();
+
+    if (!recitationHistory[todayStr] && recitationHistory[yesterdayStr]) {
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    // Limit to safe iterations
+    for (let i = 0; i < 365; i++) {
+      const dateStr = checkDate.toISOString().split('T')[0];
+      if (recitationHistory[dateStr] && recitationHistory[dateStr] > 0) {
+        currentStreak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+
+    let maxStreak = 0;
+    let tempStreak = 0;
+    const sortedDates = Object.keys(recitationHistory).sort();
+    if (sortedDates.length > 0) {
+      let prevDate: Date | null = null;
+      sortedDates.forEach(dateStr => {
+        const currentDate = new Date(dateStr);
+        if (prevDate === null) {
+          tempStreak = 1;
+        } else {
+          const diffTime = Math.abs(currentDate.getTime() - prevDate.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          if (diffDays === 1) {
+            tempStreak++;
+          } else if (diffDays > 1) {
+            maxStreak = Math.max(maxStreak, tempStreak);
+            tempStreak = 1;
+          }
+        }
+        prevDate = currentDate;
+      });
+      maxStreak = Math.max(maxStreak, tempStreak);
+    }
+
+    return { 
+      current: currentStreak, 
+      max: Math.max(maxStreak, currentStreak),
+      currentStreak: currentStreak,
+      maxStreak: Math.max(maxStreak, currentStreak),
+      lastRecitation: sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : null
+    };
+  };
+
+  // Save reflection journal entries
+  const saveReflection = (text: string) => {
+    if (!selectedName || !text.trim()) return;
+    const newEntry = {
+      text: text.trim(),
+      timestamp: new Date().toISOString()
+    };
+    setReflections(prev => {
+      const currentList = prev[selectedName.id] || [];
+      const updated = { ...prev, [selectedName.id]: [newEntry, ...currentList] };
+      localStorage.setItem('user_reflections', JSON.stringify(updated));
+
+      if (auth.currentUser) {
+        const userDocRef = doc(db, 'user_data', auth.currentUser.uid);
+        setDoc(userDocRef, {
+          reflections: updated,
+          updatedAt: new Date().toISOString()
+        }, { merge: true }).catch(err => console.error("Cloud reflection save error:", err));
+      }
+
+      return updated;
+    });
+    triggerToast("Private reflection journal entry saved.", "Journal Entry");
+    audio.playSparkle('complete');
+  };
+
+  // Custom Wird Litany Playlist Manager Functions
+  const saveCurrentQueueAsPlaylist = (name: string) => {
+    if (playlist.length === 0) {
+      triggerToast("Your recitation queue is currently empty. Add names first!", "Error");
+      return;
+    }
+    const cleanName = name.trim();
+    if (!cleanName) {
+      triggerToast("Please enter a valid name for your playlist.", "Error");
+      return;
+    }
+
+    const newWird = {
+      id: 'wird_' + Date.now(),
+      name: cleanName,
+      nameIds: [...playlist]
+    };
+
+    setCustomPlaylists(prev => {
+      const updated = [...prev, newWird];
+      localStorage.setItem('allah_names_custom_playlists', JSON.stringify(updated));
+
+      // Sync to Firestore
+      if (auth.currentUser) {
+        const userDocRef = doc(db, 'user_data', auth.currentUser.uid);
+        setDoc(userDocRef, {
+          playlists: updated,
+          updatedAt: new Date().toISOString()
+        }, { merge: true }).catch(err => console.error("Cloud playlist save error:", err));
+      }
+
+      return updated;
+    });
+
+    triggerToast(`Custom Wird playlist "${cleanName}" created successfully.`, "Wird Saved");
+    setNewPlaylistName('');
+    setIsCreatingPlaylist(false);
+    audio.playSparkle('complete');
+  };
+
+  const deleteCustomPlaylist = (id: string) => {
+    setCustomPlaylists(prev => {
+      const updated = prev.filter(p => p.id !== id);
+      localStorage.setItem('allah_names_custom_playlists', JSON.stringify(updated));
+
+      // Sync to Firestore
+      if (auth.currentUser) {
+        const userDocRef = doc(db, 'user_data', auth.currentUser.uid);
+        setDoc(userDocRef, {
+          playlists: updated,
+          updatedAt: new Date().toISOString()
+        }, { merge: true }).catch(err => console.error("Cloud playlist sync error:", err));
+      }
+
+      return updated;
+    });
+    triggerToast("Custom Wird playlist deleted.", "Wird Deleted");
+    audio.playSparkle('click');
+  };
+
+  const loadCustomPlaylist = (nameIds: number[], playlistName: string) => {
+    setPlaylist(nameIds);
+    setIsPlaylistPlaying(true);
+    setCurrentPlaylistIndex(0);
+    
+    const firstId = nameIds[0];
+    const item = namesOfAllah.find(n => n.id === firstId);
+    if (item) {
+      setSelectedName(item);
+      audio.playNameAudio(item.transliteration, item.name, item.id, qariStyle);
+      recordRecitation(item.id);
+    }
+    triggerToast(`Loaded "${playlistName}" and started recitation queue!`, "Wird Chanting");
+    audio.playSparkle('complete');
+  };
+
+  // Tasbih Digital Incrementer
+  const incrementTasbih = () => {
+    if (!selectedName) return;
+
+    audio.playSparkle('click');
+    if (navigator.vibrate) {
+      navigator.vibrate(35);
+    }
+
+    setTasbihCount(prev => {
+      const nextCount = prev + 1;
+
+      // Burst particles locally on screen
+      const colors = ['#f59e0b', '#fbbf24', '#fcd34d', '#10b981', '#3b82f6', '#ec4899'];
+      const newParticles = Array.from({ length: 12 }).map((_, i) => ({
+        id: Date.now() + i,
+        x: (Math.random() - 0.5) * 160,
+        y: (Math.random() - 0.5) * 160,
+        color: colors[Math.floor(Math.random() * colors.length)]
+      }));
+      setTasbihParticles(prevP => [...prevP, ...newParticles]);
+      setTimeout(() => {
+        setTasbihParticles(prevP => prevP.filter(p => !newParticles.find(np => np.id === p.id)));
+      }, 1000);
+
+      if (tasbihTarget !== 'free' && nextCount >= tasbihTarget) {
+        audio.playSparkle('complete');
+        triggerToast(`Completed ${tasbihTarget} recitations of ${selectedName.transliteration}!`, 'Tasbih Complete');
+        
+        recordRecitation(selectedName.id);
+        
+        if (!completed.includes(selectedName.id)) {
+          setCompleted(c => {
+            const up = [...c, selectedName.id];
+            localStorage.setItem('allah_names_comp', JSON.stringify(up));
+            if (auth.currentUser) {
+              const userDocRef = doc(db, 'user_data', auth.currentUser.uid);
+              setDoc(userDocRef, {
+                completed: up,
+                updatedAt: new Date().toISOString()
+              }, { merge: true }).catch(err => console.error("Cloud completed save error:", err));
+            }
+            return up;
+          });
+        }
+
+        // Auto advance recitation queue if active
+        if (isPlaylistPlaying && currentPlaylistIndex !== null) {
+          setTimeout(() => {
+            const nextIdx = currentPlaylistIndex + 1;
+            if (nextIdx < playlist.length) {
+              playPlaylistItem(nextIdx);
+              triggerToast("Advancing recitation queue to next name...", "Tasbih Queue");
+            } else {
+              setIsPlaylistPlaying(false);
+              setCurrentPlaylistIndex(null);
+              triggerToast("Recitation loop queue complete!", "Tasbih Queue");
+            }
+          }, 1200);
+        }
+
+        return 0; // Reset counter on reaching target
+      }
+
+      return nextCount;
+    });
+  };
+
+  // Reset counter when selecting a new name
+  useEffect(() => {
+    setTasbihCount(0);
+  }, [selectedName]);
+
+  // Spacebar event listener for Tasbih
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (selectedName && e.key === ' ' && e.target === document.body) {
+        e.preventDefault();
+        incrementTasbih();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedName, tasbihTarget, isPlaylistPlaying, currentPlaylistIndex, playlist]);
 
   // Playlist loop controls
   const playPlaylistItem = (index: number) => {
@@ -195,21 +722,37 @@ export default function App() {
     const item = namesOfAllah.find(n => n.id === nameId);
     if (item) {
       setSelectedName(item);
-      audio.playNameAudio(item.transliteration, item.name, item.id);
+      audio.playNameAudio(item.transliteration, item.name, item.id, qariStyle);
+      recordRecitation(item.id);
     }
   };
 
   useEffect(() => {
     if (!isPlaylistPlaying || currentPlaylistIndex === null) return;
 
-    // Transition to the next name in the playlist queue after 4.5 seconds
-    const timer = setTimeout(() => {
-      const nextIndex = currentPlaylistIndex + 1;
-      playPlaylistItem(nextIndex);
-    }, 4500);
+    if (qariStyle === 'studio') {
+      const vocal = audio.vocalAudio;
+      if (!vocal) return;
 
-    return () => clearTimeout(timer);
-  }, [isPlaylistPlaying, currentPlaylistIndex, playlist]);
+      const handleEnded = () => {
+        const timer = setTimeout(() => {
+          const nextIndex = currentPlaylistIndex + 1;
+          playPlaylistItem(nextIndex);
+        }, dhikrInterval * 1000);
+        return () => clearTimeout(timer);
+      };
+
+      vocal.addEventListener('ended', handleEnded);
+      return () => vocal.removeEventListener('ended', handleEnded);
+    } else {
+      const timer = setTimeout(() => {
+        const nextIndex = currentPlaylistIndex + 1;
+        playPlaylistItem(nextIndex);
+      }, 4500 + dhikrInterval * 1000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isPlaylistPlaying, currentPlaylistIndex, playlist, qariStyle, dhikrInterval]);
 
   const togglePlaylist = (id: number) => {
     const isAlreadyIn = playlist.includes(id);
@@ -340,6 +883,11 @@ export default function App() {
             const data = userDocSnap.data();
             const cloudFavs = data.favorites || [];
             const cloudComp = data.completed || [];
+            const cloudLeitner = data.leitnerBoxes || {};
+            const cloudReflections = data.reflections || {};
+            const cloudHistory = data.recitationHistory || {};
+            const cloudLogs = data.recitationLogs || [];
+            const cloudPlaylists = data.playlists || [];
             
             // Merge cloud data with local data, prioritizing cloud data
             setFavorites(prev => {
@@ -352,14 +900,58 @@ export default function App() {
               localStorage.setItem('allah_names_comp', JSON.stringify(merged));
               return merged;
             });
+            setLeitnerBoxes(prev => {
+              const merged = { ...prev, ...cloudLeitner };
+              localStorage.setItem('leitner_boxes', JSON.stringify(merged));
+              return merged;
+            });
+            setReflections(prev => {
+              const merged = { ...prev, ...cloudReflections };
+              localStorage.setItem('user_reflections', JSON.stringify(merged));
+              return merged;
+            });
+            setRecitationHistory(prev => {
+              const merged = { ...prev, ...cloudHistory };
+              localStorage.setItem('recitation_history', JSON.stringify(merged));
+              return merged;
+            });
+            setCustomPlaylists(prev => {
+              const merged = cloudPlaylists.length > 0 ? cloudPlaylists : prev;
+              localStorage.setItem('allah_names_custom_playlists', JSON.stringify(merged));
+              return merged;
+            });
+            setRecitationLogs(prev => {
+              const combined = [...prev, ...cloudLogs];
+              const uniqueMap = new Map();
+              combined.forEach(item => {
+                if (item && item.timestamp) {
+                  uniqueMap.set(item.timestamp, item);
+                }
+              });
+              const merged = Array.from(uniqueMap.values())
+                .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+                .slice(-100);
+              localStorage.setItem('recitation_logs', JSON.stringify(merged));
+              return merged as any;
+            });
           } else {
             // First time logging in, write current local storage to firestore
             const currentFavs = JSON.parse(localStorage.getItem('allah_names_favs') || '[]');
             const currentComp = JSON.parse(localStorage.getItem('allah_names_comp') || '[]');
+            const currentLeitner = JSON.parse(localStorage.getItem('leitner_boxes') || '{}');
+            const currentReflections = JSON.parse(localStorage.getItem('user_reflections') || '{}');
+            const currentHistory = JSON.parse(localStorage.getItem('recitation_history') || '{}');
+            const currentLogs = JSON.parse(localStorage.getItem('recitation_logs') || '[]');
+            const currentPlaylists = JSON.parse(localStorage.getItem('allah_names_custom_playlists') || '[]');
             await setDoc(userDocRef, {
               userId: user.uid,
               favorites: currentFavs,
               completed: currentComp,
+              leitnerBoxes: currentLeitner,
+              reflections: currentReflections,
+              recitationHistory: currentHistory,
+              recitationLogs: currentLogs,
+              playlists: currentPlaylists,
               updatedAt: new Date().toISOString()
             });
           }
@@ -499,17 +1091,24 @@ export default function App() {
 
   return (
     <div className={`relative min-h-screen w-full flex flex-col md:flex-row overflow-hidden transition-colors duration-500 font-sans ${
-      theme === 'gold' ? 'bg-[#050505] text-[#f4ebd0]' :
+      appThemeMode === 'light' ? 'bg-[#f6f5f3] text-slate-800' :
+      appThemeMode === 'midnight' ? 'bg-[#030612] text-blue-100' :
+      appThemeMode === 'sepia' ? 'bg-[#faf4e6] text-amber-950' :
+      theme === 'gold' ? 'bg-[#050503] text-[#f4ebd0]' :
       theme === 'emerald' ? 'bg-[#010503] text-emerald-100' :
       theme === 'rose' ? 'bg-[#050104] text-rose-100' :
       theme === 'ruby' ? 'bg-[#050000] text-red-100' :
       theme === 'nebula' ? 'bg-[#010105] text-indigo-100' :
+      theme === 'sapphire' ? 'bg-[#000108] text-blue-100' :
+      theme === 'amber' ? 'bg-[#050200] text-orange-100' :
+      theme === 'amethyst' ? 'bg-[#030106] text-purple-100' :
       'bg-[#020205] text-slate-100'
     }`}>
       
       {/* 3D WEBGL GALAXY BACKDROP */}
       <div className="absolute inset-0 w-full h-full z-0">
         <GalaxyCanvas
+          ref={galaxyCanvasRef}
           selectedId={selectedName ? selectedName.id : null}
           onSelectName={(item) => {
             setSelectedName(item);
@@ -523,24 +1122,133 @@ export default function App() {
           filterMode={filterMode}
           visualizationType={visualizationType}
           theme={theme}
+          galaxyType={galaxyType}
         />
       </div>
 
       {/* FLOATING RIGHT SIDE CONTROLS (CELESTIAL CONTROL DECK) */}
-      <div className="absolute right-6 bottom-[240px] z-30 flex flex-col gap-3 items-end pointer-events-none">
+      <div className="absolute right-6 bottom-[80px] z-30 flex flex-col gap-3 items-end pointer-events-none">
         
-        {/* 1. CELESTIAL ARCHITECTURE SWITCHER */}
-        <div className="flex items-center gap-2 pointer-events-auto">
-          <div className={`flex items-center gap-1.5 p-2 rounded-2xl border shadow-2xl backdrop-blur-xl transition-all duration-300 transform-gpu ${
-            activeRightMenu === 'architecture' 
+        {/* 1. COSMIC BACKDROP / GALAXY TYPE SWITCHER */}
+        <div 
+          onMouseEnter={() => {
+            setActiveRightMenu('galaxy');
+            audio.playSparkle('hover');
+          }}
+          onMouseLeave={() => {
+            setActiveRightMenu(null);
+          }}
+          className="relative flex items-center gap-2 pointer-events-auto"
+        >
+          <div className={`absolute right-12 z-50 grid grid-cols-3 gap-1.5 w-[240px] p-2.5 rounded-2xl border shadow-2xl backdrop-blur-xl transition-all duration-300 transform-gpu before:absolute before:inset-y-0 before:-right-4 before:w-4 before:content-[''] ${
+            activeRightMenu === 'galaxy' 
               ? 'translate-x-0 opacity-100 scale-100 pointer-events-auto' 
-              : 'translate-x-12 opacity-0 scale-95 pointer-events-none'
+              : 'translate-x-4 opacity-0 scale-95 pointer-events-none'
           } ${
             theme === 'gold' ? 'gold-glass-panel border-amber-500/30' :
             theme === 'emerald' ? 'emerald-glass-panel border-emerald-500/30' :
             theme === 'rose' ? 'rose-glass-panel border-fuchsia-500/30' :
             theme === 'ruby' ? 'ruby-glass-panel border-red-500/30' :
             theme === 'nebula' ? 'nebula-glass-panel border-violet-500/30' :
+            theme === 'sapphire' ? 'sapphire-glass-panel border-blue-500/30' :
+            theme === 'amber' ? 'amber-glass-panel border-amber-600/30' :
+            theme === 'amethyst' ? 'amethyst-glass-panel border-purple-500/30' :
+            'glass-panel border-white/10'
+          }`}>
+            {[
+              { id: 'andromeda', name: 'Andromeda', icon: '🌀' },
+              { id: 'milkyway', name: 'Milky Way', icon: '🌌' },
+              { id: 'orion', name: 'Orion Nebula', icon: '⭕' },
+              { id: 'cosmicweb', name: 'Cosmic Web', icon: '🕸️' },
+              { id: 'blackhole', name: 'Black Hole', icon: '🕳️' },
+              { id: 'cluster', name: 'Star Cluster', icon: '🔮' },
+              { id: 'pulsar', name: 'Pulsar Jet', icon: '💫' },
+              { id: 'supernova', name: 'Supernova', icon: '💥' },
+              { id: 'solarwind', name: 'Solar Wind', icon: '🌊' },
+            ].map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => {
+                  setGalaxyType(opt.id as any);
+                  audio.playSparkle('click');
+                  setActiveRightMenu(null); // slide back to right
+                }}
+                className={`flex flex-col items-center justify-center gap-1.5 p-2 rounded-xl text-[9px] font-mono tracking-wider transition-all border text-center cursor-pointer ${
+                  galaxyType === opt.id
+                    ? theme === 'gold' ? 'bg-amber-500/25 border-amber-500/60 text-amber-200' :
+                      theme === 'emerald' ? 'bg-emerald-500/25 border-emerald-500/60 text-emerald-200' :
+                      theme === 'rose' ? 'bg-fuchsia-500/25 border-fuchsia-500/60 text-fuchsia-200' :
+                      theme === 'ruby' ? 'bg-red-500/25 border-red-500/60 text-red-200' :
+                      theme === 'nebula' ? 'bg-violet-500/25 border-violet-500/60 text-violet-200' :
+                      theme === 'sapphire' ? 'bg-blue-500/25 border-blue-500/60 text-blue-200' :
+                      theme === 'amber' ? 'bg-orange-500/25 border-orange-500/60 text-orange-200' :
+                      theme === 'amethyst' ? 'bg-purple-500/25 border-purple-500/60 text-purple-200' :
+                      'bg-sky-500/25 border-sky-500/60 text-sky-200'
+                    : 'bg-white/5 border-transparent text-slate-400 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <span className="text-sm">{opt.icon}</span>
+                <span className="text-[8px] leading-tight truncate w-full">{opt.name}</span>
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => {
+              setActiveRightMenu(activeRightMenu === 'galaxy' ? null : 'galaxy');
+              audio.playSparkle('click');
+            }}
+            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-2xl active:scale-95 ${
+              activeRightMenu === 'galaxy'
+                ? theme === 'gold' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.3)]' :
+                  theme === 'emerald' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_15px_rgba(16,185,129,0.3)]' :
+                  theme === 'rose' ? 'bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/40 shadow-[0_0_15px_rgba(217,70,239,0.3)]' :
+                  theme === 'ruby' ? 'bg-red-500/20 text-red-400 border border-red-500/40 shadow-[0_0_15px_rgba(239,68,68,0.3)]' :
+                  theme === 'nebula' ? 'bg-violet-500/20 text-violet-400 border border-violet-500/40 shadow-[0_0_15px_rgba(139,92,246,0.3)]' :
+                  theme === 'sapphire' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.3)]' :
+                  theme === 'amber' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.3)]' :
+                  theme === 'amethyst' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.3)]' :
+                  'bg-sky-500/20 text-sky-400 border border-sky-400/40 shadow-[0_0_15px_rgba(14,165,233,0.3)]'
+                : theme === 'gold' ? 'gold-glass-panel text-amber-200 hover:border-amber-500/30' :
+                  theme === 'emerald' ? 'emerald-glass-panel text-emerald-200 hover:border-emerald-500/30' :
+                  theme === 'rose' ? 'rose-glass-panel text-fuchsia-200 hover:border-fuchsia-500/30' :
+                  theme === 'ruby' ? 'ruby-glass-panel text-red-200 hover:border-red-500/30' :
+                  theme === 'nebula' ? 'nebula-glass-panel text-violet-200 hover:border-violet-500/30' :
+                  theme === 'sapphire' ? 'sapphire-glass-panel text-blue-200 hover:border-blue-500/30' :
+                  theme === 'amber' ? 'amber-glass-panel text-amber-200 hover:border-amber-500/30' :
+                  theme === 'amethyst' ? 'amethyst-glass-panel text-purple-200 hover:border-purple-500/30' :
+                  'glass-panel text-slate-300 hover:border-white/20'
+            }`}
+            title="Cosmic Backdrop Aesthetics"
+          >
+            <Orbit size={16} />
+          </button>
+        </div>
+
+        {/* 2. CELESTIAL ARCHITECTURE SWITCHER */}
+        <div 
+          onMouseEnter={() => {
+            setActiveRightMenu('architecture');
+            audio.playSparkle('hover');
+          }}
+          onMouseLeave={() => {
+            setActiveRightMenu(null);
+          }}
+          className="relative flex items-center gap-2 pointer-events-auto"
+        >
+          <div className={`absolute right-12 z-50 grid grid-cols-3 gap-1.5 w-[240px] p-2.5 rounded-2xl border shadow-2xl backdrop-blur-xl transition-all duration-300 transform-gpu before:absolute before:inset-y-0 before:-right-4 before:w-4 before:content-[''] ${
+            activeRightMenu === 'architecture' 
+              ? 'translate-x-0 opacity-100 scale-100 pointer-events-auto' 
+              : 'translate-x-4 opacity-0 scale-95 pointer-events-none'
+          } ${
+            theme === 'gold' ? 'gold-glass-panel border-amber-500/30' :
+            theme === 'emerald' ? 'emerald-glass-panel border-emerald-500/30' :
+            theme === 'rose' ? 'rose-glass-panel border-fuchsia-500/30' :
+            theme === 'ruby' ? 'ruby-glass-panel border-red-500/30' :
+            theme === 'nebula' ? 'nebula-glass-panel border-violet-500/30' :
+            theme === 'sapphire' ? 'sapphire-glass-panel border-blue-500/30' :
+            theme === 'amber' ? 'amber-glass-panel border-amber-600/30' :
+            theme === 'amethyst' ? 'amethyst-glass-panel border-purple-500/30' :
             'glass-panel border-white/10'
           }`}>
             {[
@@ -550,6 +1258,9 @@ export default function App() {
               { id: 'wave', name: 'Wave', icon: '🌊' },
               { id: 'supernova', name: 'Supernova', icon: '💥' },
               { id: 'infinity', name: 'Infinity', icon: '♾️' },
+              { id: 'galaxy', name: 'Galaxy', icon: '🪐' },
+              { id: 'pulsar', name: 'Pulsar', icon: '💫' },
+              { id: 'aurora', name: 'Aurora', icon: '☄️' },
             ].map(opt => (
               <button
                 key={opt.id}
@@ -558,19 +1269,22 @@ export default function App() {
                   audio.playSparkle('click');
                   setActiveRightMenu(null); // slide back to right
                 }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-mono tracking-wider transition-all border shrink-0 ${
+                className={`flex flex-col items-center justify-center gap-1.5 p-2 rounded-xl text-[9px] font-mono tracking-wider transition-all border text-center cursor-pointer ${
                   visualizationType === opt.id
                     ? theme === 'gold' ? 'bg-amber-500/25 border-amber-500/60 text-amber-200' :
                       theme === 'emerald' ? 'bg-emerald-500/25 border-emerald-500/60 text-emerald-200' :
                       theme === 'rose' ? 'bg-fuchsia-500/25 border-fuchsia-500/60 text-fuchsia-200' :
                       theme === 'ruby' ? 'bg-red-500/25 border-red-500/60 text-red-200' :
                       theme === 'nebula' ? 'bg-violet-500/25 border-violet-500/60 text-violet-200' :
+                      theme === 'sapphire' ? 'bg-blue-500/25 border-blue-500/60 text-blue-200' :
+                      theme === 'amber' ? 'bg-orange-500/25 border-orange-500/60 text-orange-200' :
+                      theme === 'amethyst' ? 'bg-purple-500/25 border-purple-500/60 text-purple-200' :
                       'bg-sky-500/25 border-sky-500/60 text-sky-200'
                     : 'bg-white/5 border-transparent text-slate-400 hover:text-white hover:bg-white/10'
                 }`}
               >
-                <span>{opt.icon}</span>
-                <span>{opt.name}</span>
+                <span className="text-sm">{opt.icon}</span>
+                <span className="text-[8px] leading-tight truncate w-full">{opt.name}</span>
               </button>
             ))}
           </div>
@@ -587,12 +1301,18 @@ export default function App() {
                   theme === 'rose' ? 'bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/40 shadow-[0_0_15px_rgba(217,70,239,0.3)]' :
                   theme === 'ruby' ? 'bg-red-500/20 text-red-400 border border-red-500/40 shadow-[0_0_15px_rgba(239,68,68,0.3)]' :
                   theme === 'nebula' ? 'bg-violet-500/20 text-violet-400 border border-violet-500/40 shadow-[0_0_15px_rgba(139,92,246,0.3)]' :
+                  theme === 'sapphire' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.3)]' :
+                  theme === 'amber' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.3)]' :
+                  theme === 'amethyst' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.3)]' :
                   'bg-sky-500/20 text-sky-400 border border-sky-400/40 shadow-[0_0_15px_rgba(14,165,233,0.3)]'
                 : theme === 'gold' ? 'gold-glass-panel text-amber-200 hover:border-amber-500/30' :
                   theme === 'emerald' ? 'emerald-glass-panel text-emerald-200 hover:border-emerald-500/30' :
                   theme === 'rose' ? 'rose-glass-panel text-fuchsia-200 hover:border-fuchsia-500/30' :
                   theme === 'ruby' ? 'ruby-glass-panel text-red-200 hover:border-red-500/30' :
                   theme === 'nebula' ? 'nebula-glass-panel text-violet-200 hover:border-violet-500/30' :
+                  theme === 'sapphire' ? 'sapphire-glass-panel text-blue-200 hover:border-blue-500/30' :
+                  theme === 'amber' ? 'amber-glass-panel text-amber-200 hover:border-amber-500/30' :
+                  theme === 'amethyst' ? 'amethyst-glass-panel text-purple-200 hover:border-purple-500/30' :
                   'glass-panel text-slate-300 hover:border-white/20'
             }`}
             title="Celestial Architecture Configuration"
@@ -601,18 +1321,30 @@ export default function App() {
           </button>
         </div>
 
-        {/* 2. CELESTIAL THEME SWITCHER */}
-        <div className="flex items-center gap-2 pointer-events-auto">
-          <div className={`flex items-center gap-1.5 p-2 rounded-2xl border shadow-2xl backdrop-blur-xl transition-all duration-300 transform-gpu ${
+        {/* 3. CELESTIAL THEME SWITCHER */}
+        <div 
+          onMouseEnter={() => {
+            setActiveRightMenu('theme');
+            audio.playSparkle('hover');
+          }}
+          onMouseLeave={() => {
+            setActiveRightMenu(null);
+          }}
+          className="relative flex items-center gap-2 pointer-events-auto"
+        >
+          <div className={`absolute right-12 z-50 grid grid-cols-3 gap-1.5 w-[240px] p-2.5 rounded-2xl border shadow-2xl backdrop-blur-xl transition-all duration-300 transform-gpu before:absolute before:inset-y-0 before:-right-4 before:w-4 before:content-[''] ${
             activeRightMenu === 'theme' 
               ? 'translate-x-0 opacity-100 scale-100 pointer-events-auto' 
-              : 'translate-x-12 opacity-0 scale-95 pointer-events-none'
+              : 'translate-x-4 opacity-0 scale-95 pointer-events-none'
           } ${
             theme === 'gold' ? 'gold-glass-panel border-amber-500/30' :
             theme === 'emerald' ? 'emerald-glass-panel border-emerald-500/30' :
             theme === 'rose' ? 'rose-glass-panel border-fuchsia-500/30' :
             theme === 'ruby' ? 'ruby-glass-panel border-red-500/30' :
             theme === 'nebula' ? 'nebula-glass-panel border-violet-500/30' :
+            theme === 'sapphire' ? 'sapphire-glass-panel border-blue-500/30' :
+            theme === 'amber' ? 'amber-glass-panel border-amber-600/30' :
+            theme === 'amethyst' ? 'amethyst-glass-panel border-purple-500/30' :
             'glass-panel border-white/10'
           }`}>
             {[
@@ -622,6 +1354,9 @@ export default function App() {
               { id: 'rose', name: 'Rose', dot: 'bg-fuchsia-400 shadow-fuchsia-400/40' },
               { id: 'ruby', name: 'Ruby', dot: 'bg-red-500 shadow-red-500/40' },
               { id: 'nebula', name: 'Nebula', dot: 'bg-violet-500 shadow-violet-500/40' },
+              { id: 'sapphire', name: 'Sapphire', dot: 'bg-blue-500 shadow-blue-500/40' },
+              { id: 'amber', name: 'Amber', dot: 'bg-orange-500 shadow-orange-500/40' },
+              { id: 'amethyst', name: 'Amethyst', dot: 'bg-indigo-500 shadow-indigo-500/40' },
             ].map(t => (
               <button
                 key={t.id}
@@ -630,14 +1365,14 @@ export default function App() {
                   audio.playSparkle('click');
                   setActiveRightMenu(null); // slide back to right
                 }}
-                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-[10px] font-mono tracking-wider transition-all border shrink-0 ${
+                className={`flex flex-col items-center justify-center p-2 rounded-xl text-[9px] font-mono tracking-wider transition-all border text-center gap-1.5 w-full cursor-pointer ${
                   theme === t.id
-                    ? 'bg-white/10 border-white/30 text-white font-medium'
-                    : 'bg-white/5 border-transparent text-slate-400 hover:text-white hover:bg-white/10'
+                    ? 'bg-white/10 border-white/30 text-white font-medium scale-105 shadow-[0_0_10px_rgba(255,255,255,0.1)]'
+                    : 'bg-white/5 border-transparent text-slate-400 hover:text-white hover:bg-white/10 hover:scale-105 hover:border-white/10'
                 }`}
               >
-                <div className={`w-2 h-2 rounded-full ${t.dot}`} />
-                <span>{t.name}</span>
+                <div className={`w-2.5 h-2.5 rounded-full ${t.dot}`} />
+                <span className="text-[8px] leading-tight truncate w-full">{t.name}</span>
               </button>
             ))}
           </div>
@@ -654,12 +1389,18 @@ export default function App() {
                   theme === 'rose' ? 'bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/40 shadow-[0_0_15px_rgba(217,70,239,0.3)]' :
                   theme === 'ruby' ? 'bg-red-500/20 text-red-400 border border-red-500/40 shadow-[0_0_15px_rgba(239,68,68,0.3)]' :
                   theme === 'nebula' ? 'bg-violet-500/20 text-violet-400 border border-violet-500/40 shadow-[0_0_15px_rgba(139,92,246,0.3)]' :
+                  theme === 'sapphire' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.3)]' :
+                  theme === 'amber' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.3)]' :
+                  theme === 'amethyst' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.3)]' :
                   'bg-sky-500/20 text-sky-400 border border-sky-400/40 shadow-[0_0_15px_rgba(14,165,233,0.3)]'
                 : theme === 'gold' ? 'gold-glass-panel text-amber-200 hover:border-amber-500/30' :
                   theme === 'emerald' ? 'emerald-glass-panel text-emerald-200 hover:border-emerald-500/30' :
                   theme === 'rose' ? 'rose-glass-panel text-fuchsia-200 hover:border-fuchsia-500/30' :
                   theme === 'ruby' ? 'ruby-glass-panel text-red-200 hover:border-red-500/30' :
                   theme === 'nebula' ? 'nebula-glass-panel text-violet-200 hover:border-violet-500/30' :
+                  theme === 'sapphire' ? 'sapphire-glass-panel text-blue-200 hover:border-blue-500/30' :
+                  theme === 'amber' ? 'amber-glass-panel text-amber-200 hover:border-amber-500/30' :
+                  theme === 'amethyst' ? 'amethyst-glass-panel text-purple-200 hover:border-purple-500/30' :
                   'glass-panel text-slate-300 hover:border-white/20'
             }`}
             title="Celestial Theme Aesthetics"
@@ -668,26 +1409,74 @@ export default function App() {
           </button>
         </div>
 
-        {/* 3. CONSTELLATION EXPLORATION GUIDE */}
-        <div className="flex items-center gap-2 pointer-events-auto">
-          <button
-            onClick={() => {
-              setForceShowTutorial(true);
-              audio.playSparkle('click');
-            }}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-2xl active:scale-95 ${
-              theme === 'gold' ? 'gold-glass-panel text-amber-200 hover:border-amber-500/30' :
-              theme === 'emerald' ? 'emerald-glass-panel text-emerald-200 hover:border-emerald-500/30' :
-              theme === 'rose' ? 'rose-glass-panel text-fuchsia-200 hover:border-fuchsia-500/30' :
-              theme === 'ruby' ? 'ruby-glass-panel text-red-200 hover:border-red-500/30' :
-              theme === 'nebula' ? 'nebula-glass-panel text-violet-200 hover:border-violet-500/30' :
-              'glass-panel text-slate-300 hover:border-white/20'
-            }`}
-            title="3D Constellation Exploration Guide"
-          >
-            <HelpCircle size={16} />
-          </button>
-        </div>
+        {/* ZOOM IN */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            audio.playSparkle('click');
+            galaxyCanvasRef.current?.zoomIn();
+          }}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-2xl active:scale-95 pointer-events-auto font-bold text-lg ${
+            theme === 'gold' ? 'gold-glass-panel text-amber-200 hover:border-amber-500/30 hover:text-amber-400' :
+            theme === 'emerald' ? 'emerald-glass-panel text-emerald-200 hover:border-emerald-500/30 hover:text-emerald-400' :
+            theme === 'rose' ? 'rose-glass-panel text-fuchsia-200 hover:border-fuchsia-500/30 hover:text-fuchsia-400' :
+            theme === 'ruby' ? 'ruby-glass-panel text-red-200 hover:border-red-500/30 hover:text-red-400' :
+            theme === 'nebula' ? 'nebula-glass-panel text-violet-200 hover:border-violet-500/30 hover:text-violet-400' :
+            theme === 'sapphire' ? 'sapphire-glass-panel text-blue-200 hover:border-blue-500/30 hover:text-blue-400' :
+            theme === 'amber' ? 'amber-glass-panel text-amber-200 hover:border-amber-500/30 hover:text-amber-400' :
+            theme === 'amethyst' ? 'amethyst-glass-panel text-purple-200 hover:border-purple-500/30 hover:text-purple-400' :
+            'glass-panel text-slate-300 hover:border-white/20 hover:text-white'
+          }`}
+          title="Zoom In (＋)"
+        >
+          ＋
+        </button>
+
+        {/* ZOOM OUT */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            audio.playSparkle('click');
+            galaxyCanvasRef.current?.zoomOut();
+          }}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-2xl active:scale-95 pointer-events-auto font-bold text-lg ${
+            theme === 'gold' ? 'gold-glass-panel text-amber-200 hover:border-amber-500/30 hover:text-amber-400' :
+            theme === 'emerald' ? 'emerald-glass-panel text-emerald-200 hover:border-emerald-500/30 hover:text-emerald-400' :
+            theme === 'rose' ? 'rose-glass-panel text-fuchsia-200 hover:border-fuchsia-500/30 hover:text-fuchsia-400' :
+            theme === 'ruby' ? 'ruby-glass-panel text-red-200 hover:border-red-500/30 hover:text-red-400' :
+            theme === 'nebula' ? 'nebula-glass-panel text-violet-200 hover:border-violet-500/30 hover:text-violet-400' :
+            theme === 'sapphire' ? 'sapphire-glass-panel text-blue-200 hover:border-blue-500/30 hover:text-blue-400' :
+            theme === 'amber' ? 'amber-glass-panel text-amber-200 hover:border-amber-500/30 hover:text-amber-400' :
+            theme === 'amethyst' ? 'amethyst-glass-panel text-purple-200 hover:border-purple-500/30 hover:text-purple-400' :
+            'glass-panel text-slate-300 hover:border-white/20 hover:text-white'
+          }`}
+          title="Zoom Out (－)"
+        >
+          －
+        </button>
+
+        {/* RESET VIEW */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            audio.playSparkle('click');
+            galaxyCanvasRef.current?.resetZoom();
+          }}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-2xl active:scale-95 pointer-events-auto text-[8px] uppercase tracking-wider font-bold ${
+            theme === 'gold' ? 'gold-glass-panel text-amber-200 hover:border-amber-500/30 hover:text-amber-400' :
+            theme === 'emerald' ? 'emerald-glass-panel text-emerald-200 hover:border-emerald-500/30 hover:text-emerald-400' :
+            theme === 'rose' ? 'rose-glass-panel text-fuchsia-200 hover:border-fuchsia-500/30 hover:text-fuchsia-400' :
+            theme === 'ruby' ? 'ruby-glass-panel text-red-200 hover:border-red-500/30 hover:text-red-400' :
+            theme === 'nebula' ? 'nebula-glass-panel text-violet-200 hover:border-violet-500/30 hover:text-violet-400' :
+            theme === 'sapphire' ? 'sapphire-glass-panel text-blue-200 hover:border-blue-500/30 hover:text-blue-400' :
+            theme === 'amber' ? 'amber-glass-panel text-amber-200 hover:border-amber-500/30 hover:text-amber-400' :
+            theme === 'amethyst' ? 'amethyst-glass-panel text-purple-200 hover:border-purple-500/30 hover:text-purple-400' :
+            'glass-panel text-slate-300 hover:border-white/20 hover:text-white'
+          }`}
+          title="Reset View"
+        >
+          Reset
+        </button>
 
       </div>
 
@@ -707,20 +1496,20 @@ export default function App() {
       <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-gradient-to-tl from-amber-900/10 via-transparent to-transparent rounded-full blur-[100px] pointer-events-none z-1"></div>
 
       {/* TOP HEADS UP DISPLAY / HEADER ACTION BAR */}
-      <header className="absolute top-0 inset-x-0 z-40 pointer-events-none flex flex-col sm:flex-row items-center justify-between px-6 py-4 gap-4">
-        <div className="pointer-events-auto flex items-center gap-4 bg-black/45 backdrop-blur-md border border-amber-500/20 rounded-full px-5 py-3 select-none shadow-2xl">
-          <div className="w-9 h-9 border-2 border-amber-500/50 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.25)] shrink-0">
-            <div className="w-5 h-5 border border-amber-400 rounded-sm rotate-45 flex items-center justify-center">
+      <header className="absolute top-0 inset-x-0 z-40 pointer-events-none flex flex-col sm:flex-row items-center justify-between px-4 sm:px-6 py-4 gap-4">
+        <div className="pointer-events-auto flex items-center gap-3 bg-black/45 backdrop-blur-md border border-amber-500/20 rounded-full px-4 py-2.5 select-none shadow-2xl">
+          <div className="w-8 h-8 border-2 border-amber-500/50 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.25)] shrink-0">
+            <div className="w-4.5 h-4.5 border border-amber-400 rounded-sm rotate-45 flex items-center justify-center">
               <div className="w-1.5 h-1.5 bg-amber-400 rounded-full"></div>
             </div>
           </div>
           <div>
-            <h1 className="text-sm font-light tracking-[0.2em] text-amber-50 uppercase font-display">Al-Asma-ul-Husna</h1>
-            <p className="text-[9px] tracking-widest text-amber-500/60 uppercase font-mono">The 99 Beautiful Names</p>
+            <h1 className="text-xs sm:text-sm font-light tracking-[0.2em] text-amber-50 uppercase font-display">Al-Asma-ul-Husna</h1>
+            <p className="text-[8px] sm:text-[9px] tracking-widest text-amber-500/60 uppercase font-mono">The 99 Beautiful Names</p>
           </div>
-          <div className="pl-3.5 ml-1 border-l border-white/10 flex flex-col justify-center">
-            <span className="text-[14px] font-bold font-mono text-amber-400 leading-none">{exploredNames.length}</span>
-            <span className="text-[8px] font-mono tracking-wider text-slate-400 uppercase mt-0.5 whitespace-nowrap font-semibold">Names Explored</span>
+          <div className="pl-3 ml-0.5 border-l border-white/10 flex flex-col justify-center">
+            <span className="text-xs sm:text-[14px] font-bold font-mono text-amber-400 leading-none">{exploredNames.length}</span>
+            <span className="text-[7px] sm:text-[8px] font-mono tracking-wider text-slate-400 uppercase mt-0.5 whitespace-nowrap font-semibold">Names Explored</span>
           </div>
         </div>
 
@@ -731,6 +1520,18 @@ export default function App() {
             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
             <span>Offline Ready</span>
           </div>
+
+          {/* 3D Constellation Exploration Guide */}
+          <button
+            onClick={() => {
+              setForceShowTutorial(true);
+              audio.playSparkle('click');
+            }}
+            title="3D Constellation Exploration Guide"
+            className="p-1.5 rounded-full hover:bg-white/5 text-slate-400 hover:text-slate-200 transition-all flex items-center justify-center"
+          >
+            <HelpCircle size={16} className="text-amber-400" />
+          </button>
 
           {/* Zen Mode Toggle */}
           <button
@@ -810,23 +1611,83 @@ export default function App() {
             )}
           </div>
 
-          {/* Export Progress Certificate Button */}
-          <button
-            onClick={() => {
-              setShowCertificateModal(true);
-              audio.playSparkle('click');
-            }}
-            title="Export Progress Certificate"
-            className="p-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 hover:text-amber-200 transition-all flex items-center justify-center animate-pulse"
-          >
-            <Award size={16} />
-          </button>
+          {/* Global Web Page Theme Switcher Dropdown */}
+          <div className="relative pointer-events-auto">
+            <button
+              onClick={() => {
+                setShowThemeDropdown(!showThemeDropdown);
+                setShowNotifications(false);
+                setShowAuth(false);
+                audio.playSparkle('click');
+              }}
+              title="Global Web Page Theme Switcher"
+              className={`p-1.5 rounded-full transition-all flex items-center justify-center cursor-pointer ${
+                showThemeDropdown
+                  ? 'bg-amber-500/25 text-amber-300 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                  : 'hover:bg-white/5 text-slate-400 hover:text-white'
+              }`}
+            >
+              <Palette size={16} />
+            </button>
+
+            {/* Dropdown Menu */}
+            {showThemeDropdown && (
+              <div 
+                className={`absolute right-0 mt-3.5 z-50 flex flex-col gap-1.5 w-[220px] p-3 rounded-2xl border shadow-2xl backdrop-blur-xl animate-fade-in ${getGlassPanelClass()}`}
+              >
+                <div className={`text-[10px] font-mono tracking-wider uppercase font-semibold pb-1.5 border-b mb-1 ${isLight ? 'text-slate-500 border-slate-200' : 'text-slate-400 border-white/5'}`}>
+                  Web App Theme
+                </div>
+                {[
+                  { id: 'dark', name: 'Cosmic Dark', dot: 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]', desc: 'Space dark glass aesthetic', icon: Moon },
+                  { id: 'light', name: 'Elegant Light', dot: 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]', desc: 'Clean, high-contrast light', icon: Sun },
+                  { id: 'midnight', name: 'Midnight Blue', dot: 'bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]', desc: 'Deep royal space blue', icon: Orbit },
+                  { id: 'sepia', name: 'Warm Sepia', dot: 'bg-orange-700 shadow-[0_0_8px_rgba(194,65,12,0.5)]', desc: 'Warm desert dunes glow', icon: Sparkles },
+                ].map(t => {
+                  const IconComp = t.icon;
+                  const isSelected = appThemeMode === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setAppThemeMode(t.id as any);
+                        audio.playSparkle('click');
+                        setShowThemeDropdown(false);
+                      }}
+                      className={`flex items-center gap-3 p-2 rounded-xl text-left transition-all border w-full cursor-pointer group ${
+                        isSelected
+                          ? isLight
+                            ? 'bg-amber-500/10 border-amber-500/40 text-amber-900 font-medium'
+                            : 'bg-white/10 border-white/30 text-white font-medium scale-[1.02] shadow-[0_0_12px_rgba(255,255,255,0.05)]'
+                          : isLight
+                            ? 'bg-transparent border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                            : 'bg-transparent border-transparent text-slate-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <div className={`p-1.5 rounded-lg shrink-0 ${
+                        isSelected 
+                          ? isLight ? 'bg-amber-500/20 text-amber-800' : 'bg-white/15 text-white' 
+                          : isLight ? 'bg-slate-100 text-slate-500 group-hover:bg-slate-200' : 'bg-white/5 text-slate-400 group-hover:bg-white/10'
+                      }`}>
+                        <IconComp size={14} />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[10px] font-sans font-medium tracking-wide leading-none">{t.name}</span>
+                        <span className={`text-[8px] font-mono tracking-wide mt-1 leading-none truncate ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>{t.desc}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Notifications config */}
           <button
             onClick={() => {
               setShowNotifications(!showNotifications);
               setShowAuth(false);
+              setShowThemeDropdown(false);
               setActiveRightMenu(null);
             }}
             title="Notification Scheduling"
@@ -844,6 +1705,7 @@ export default function App() {
             onClick={() => {
               setShowAuth(!showAuth);
               setShowNotifications(false);
+              setShowThemeDropdown(false);
               setActiveRightMenu(null);
             }}
             title="Spiritual Cloud Sync"
@@ -914,390 +1776,729 @@ export default function App() {
         (isSidebarCollapsed || zenMode) 
           ? 'w-full h-0 md:h-screen md:w-0 overflow-hidden opacity-0 border-b-0 md:border-r-0 pointer-events-none' 
           : 'w-full h-1/2 md:h-screen md:w-[380px] shrink-0 border-b md:border-b-0 md:border-r'
-      } ${
-        theme === 'gold' ? 'gold-glass-panel' :
-        theme === 'emerald' ? 'emerald-glass-panel' :
-        theme === 'rose' ? 'rose-glass-panel' :
-        theme === 'ruby' ? 'ruby-glass-panel' :
-        theme === 'nebula' ? 'nebula-glass-panel' :
-        'glass-panel'
-      }`}>
+      } ${getGlassPanelClass()}`}>
         
         {/* Core title spacing on desktop */}
-        <div className="hidden md:block px-6 pt-24 pb-4">
-          <h2 className="font-display font-light text-xl text-amber-200 tracking-wider uppercase">Asma-ul-Husna Hub</h2>
-          <p className="text-[11px] text-gray-400 leading-relaxed mt-1">Explore the spiritual depths, memorize, and track recitation completion of the 99 divine names.</p>
+        <div className="hidden md:block px-6 pt-24 pb-3">
+          <h2 className={`font-display font-light text-xl tracking-wider uppercase ${isLight ? 'text-amber-800' : 'text-amber-200'}`}>Asma-ul-Husna Hub</h2>
+          <p className={`text-[11px] leading-relaxed mt-1 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Explore the spiritual depths, memorize, and track recitation completion of the 99 divine names.</p>
         </div>
 
-        {/* MEMORIZATION PROGRESS METRIC CARD */}
-        <div className="px-5 py-4 border-b border-white/10 flex flex-col gap-3 bg-black/40">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full border border-amber-500/20 bg-amber-500/5 flex items-center justify-center text-amber-400 shadow-inner">
-                <Award size={20} />
-              </div>
-              <div>
-                <span className="text-xs font-medium block text-amber-50/90 font-display">Memorization Goals</span>
-                <span className="font-mono text-[10px] text-gray-450">{completed.length} / 99 completed</span>
-              </div>
-            </div>
-
-            {/* Radial/Bar Visualizer */}
-            <div className="flex flex-col items-end gap-1">
-              <div className="w-24 bg-black rounded-full h-1.5 overflow-hidden border border-white/10">
-                <div 
-                  className="bg-amber-500 h-full rounded-full transition-all duration-500"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <span className="font-mono text-[10px] text-emerald-400 font-bold">{progressPercent}%</span>
-            </div>
-          </div>
-        </div>
-
-        {/* FILTER & SEARCH SUITE */}
-        <div className="p-4 flex flex-col gap-3 border-b border-white/10 bg-black/20">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-full pl-9 pr-8 py-2.5 text-xs text-[#e0e0e0] placeholder-gray-600 focus:outline-none focus:border-amber-500/50 transition-colors font-sans"
-                placeholder="Search names..."
-              />
-              {searchQuery && (
-                <button 
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-
-            <button
-              onClick={() => {
-                const randomId = Math.floor(Math.random() * 99) + 1;
-                const item = namesOfAllah.find(n => n.id === randomId);
-                if (item) {
-                  setSelectedName(item);
-                  audio.playNameAudio(item.transliteration, item.name, item.id);
-                  audio.playSparkle('click');
-                  triggerToast(`Selected Name #${item.id}: ${item.transliteration}`, "Daily Inspiration");
-                }
-              }}
-              title="Daily Inspiration (Random Reflection)"
-              className="px-3 rounded-full bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 hover:text-amber-200 flex items-center justify-center gap-1.5 transition-all text-[11px] font-mono tracking-wider active:scale-95 whitespace-nowrap shrink-0"
-            >
-              <span>🎲</span>
-              <span className="hidden sm:inline">Random</span>
-            </button>
-          </div>
-
-          {/* Category Horizontal scroll */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 no-scrollbar scroll-smooth">
-            {['All', 'Mercy', 'Majesty', 'Wisdom', 'Power', 'Justice', 'Protection', 'Generosity'].map(cat => (
+        {/* SIDEBAR TABS NAVIGATOR BAR */}
+        <div className={`flex items-center border-b p-1 relative shrink-0 ${isLight ? 'border-slate-200 bg-slate-100' : 'border-white/5 bg-black/35'}`}>
+          {[
+            { id: 'directory', label: '📖 Directory', count: filteredList.length },
+            { id: 'dhikr', label: '🎵 Dhikr Queue', count: playlist.length },
+            { id: 'stats', label: '📊 Insights', count: completed.length }
+          ].map((tab) => {
+            const isActive = activeSidebarTab === tab.id;
+            return (
               <button
-                key={cat}
+                key={tab.id}
                 onClick={() => {
-                  setSelectedCategory(cat);
-                  audio.playSparkle('hover');
+                  setActiveSidebarTab(tab.id as any);
+                  audio.playSparkle('click');
                 }}
-                className={`px-3 py-1 rounded-full text-[10px] font-mono tracking-wide capitalize shrink-0 border transition-all ${
-                  selectedCategory === cat
-                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.1)]'
-                    : 'bg-white/5 border-white/10 text-gray-400 hover:text-gray-200'
+                className={`flex-1 py-2 rounded-lg text-xs font-medium tracking-wide uppercase transition-all duration-300 relative focus:outline-none cursor-pointer flex flex-col items-center justify-center ${
+                  isActive
+                    ? isLight
+                      ? 'text-amber-800 bg-amber-500/15 border border-amber-500/30 shadow-sm'
+                      : theme === 'gold' ? 'text-amber-300 bg-amber-500/10 shadow-[inset_0_0_8px_rgba(245,158,11,0.15)] border border-amber-500/25' :
+                        theme === 'emerald' ? 'text-emerald-400 bg-emerald-500/10 shadow-[inset_0_0_8px_rgba(16,185,129,0.15)] border border-emerald-500/25' :
+                        theme === 'rose' ? 'text-fuchsia-400 bg-fuchsia-500/10 shadow-[inset_0_0_8px_rgba(217,70,239,0.15)] border border-fuchsia-500/25' :
+                        theme === 'ruby' ? 'text-red-400 bg-red-500/10 shadow-[inset_0_0_8px_rgba(239,68,68,0.15)] border border-red-500/25' :
+                        theme === 'nebula' ? 'text-violet-400 bg-violet-500/10 shadow-[inset_0_0_8px_rgba(139,92,246,0.15)] border border-violet-500/25' :
+                        theme === 'sapphire' ? 'text-blue-400 bg-blue-500/10 shadow-[inset_0_0_8px_rgba(59,130,246,0.15)] border border-blue-500/25' :
+                        theme === 'amber' ? 'text-amber-500 bg-amber-500/10 shadow-[inset_0_0_8px_rgba(245,158,11,0.15)] border border-amber-500/25' :
+                        theme === 'amethyst' ? 'text-purple-400 bg-purple-500/10 shadow-[inset_0_0_8px_rgba(168,85,247,0.15)] border border-purple-500/25' :
+                        'text-sky-400 bg-sky-500/10 shadow-[inset_0_0_8px_rgba(56,189,248,0.15)] border border-sky-500/25'
+                    : isLight
+                      ? 'text-slate-500 hover:text-slate-800 border border-transparent'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
                 }`}
               >
-                {cat}
-              </button>
-            ))}
-          </div>
-
-          {/* List Display Filter Toggles */}
-          <div className="grid grid-cols-3 gap-1 bg-black/40 p-1 rounded-lg border border-white/10 text-[10px] font-mono">
-            <button
-              onClick={() => {
-                setFilterMode('all');
-                audio.playSparkle('hover');
-              }}
-              className={`py-1 rounded text-center transition-all ${
-                filterMode === 'all' ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold' : 'text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              All Names
-            </button>
-            <button
-              onClick={() => {
-                setFilterMode('favorites');
-                audio.playSparkle('hover');
-              }}
-              className={`py-1 rounded text-center flex items-center justify-center gap-1 transition-all ${
-                filterMode === 'favorites' ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold' : 'text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              <Star size={10} className="text-amber-400 fill-amber-400" /> ({favorites.length})
-            </button>
-            <button
-              onClick={() => {
-                setFilterMode('completed');
-                audio.playSparkle('hover');
-              }}
-              className={`py-1 rounded text-center flex items-center justify-center gap-1 transition-all ${
-                filterMode === 'completed' ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold' : 'text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              <CheckSquare size={10} className="text-emerald-400" /> ({completed.length})
-            </button>
-          </div>
-        </div>
-
-        {/* RECENTLY VIEWED SECTION */}
-        {recentlyViewed.length > 0 && (
-          <div className="px-5 py-3 border-b border-white/10 bg-black/10">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[9px] font-mono tracking-wider text-gray-500 uppercase font-bold flex items-center gap-1.5">
-                <Clock size={10} className="text-amber-500" />
-                Recently Viewed
-              </span>
-              <button 
-                onClick={() => setRecentlyViewed([])}
-                className="text-[8px] font-mono text-gray-500 hover:text-amber-400 uppercase tracking-widest transition-colors"
-              >
-                Clear
-              </button>
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
-              {recentlyViewed.map(id => {
-                const item = namesOfAllah.find(n => n.id === id);
-                if (!item) return null;
-                const isSelected = selectedName?.id === item.id;
-                return (
-                  <button
-                    key={id}
-                    onClick={() => {
-                      setSelectedName(item);
-                      audio.playNameAudio(item.transliteration, item.name, item.id);
-                      audio.playSparkle('click');
-                    }}
-                    className={`px-2.5 py-1.5 rounded-lg text-left border transition-all shrink-0 flex flex-col min-w-[75px] ${
-                      isSelected
-                        ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
-                        : 'bg-white/5 border-white/5 text-slate-350 hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    <span className="text-[11px] font-arabic leading-none mb-1 text-right w-full">{item.name}</span>
-                    <span className="text-[8px] font-mono truncate max-w-[70px] leading-none text-slate-400">{item.transliteration}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* RECITATION PLAYLIST PLAYER */}
-        <div className="px-5 py-3 border-b border-white/10 bg-black/35 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[9px] font-mono tracking-wider text-gray-500 uppercase font-bold flex items-center gap-1.5">
-              <Music size={11} className={`text-amber-500 ${isPlaylistPlaying ? 'animate-spin' : 'animate-pulse'}`} />
-              Recitation Loop Queue ({playlist.length})
-            </span>
-            {playlist.length > 0 && (
-              <button 
-                onClick={() => {
-                  setIsPlaylistPlaying(false);
-                  setCurrentPlaylistIndex(null);
-                  setPlaylist([]);
-                  triggerToast("Recitation loop queue cleared.", "Playlist Queue");
-                }}
-                className="text-[8px] font-mono text-rose-400/70 hover:text-rose-400 uppercase tracking-widest transition-colors"
-              >
-                Clear Queue
-              </button>
-            )}
-          </div>
-
-          {playlist.length === 0 ? (
-            <div className="py-2 px-3 rounded-xl border border-dashed border-white/5 bg-white/5 text-[9px] text-slate-500 text-center font-mono select-none">
-              Add names below to start a sequential loop
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {/* Media Controls */}
-              <div className="flex items-center justify-between bg-black/40 border border-white/5 rounded-xl p-2">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => {
-                      if (currentPlaylistIndex !== null) {
-                        const prevIdx = currentPlaylistIndex === 0 ? playlist.length - 1 : currentPlaylistIndex - 1;
-                        playPlaylistItem(prevIdx);
-                      } else {
-                        playPlaylistItem(0);
-                      }
-                      audio.playSparkle('click');
-                    }}
-                    className="p-1 rounded-full hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
-                    title="Previous Recitation"
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      if (isPlaylistPlaying) {
-                        setIsPlaylistPlaying(false);
-                        triggerToast("Recitation loop paused.", "Recitation Queue");
-                      } else {
-                        setIsPlaylistPlaying(true);
-                        playPlaylistItem(currentPlaylistIndex !== null ? currentPlaylistIndex : 0);
-                        triggerToast("Starting recitation loop...", "Recitation Queue");
-                      }
-                      audio.playSparkle('click');
-                    }}
-                    className="p-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 transition-all"
-                    title={isPlaylistPlaying ? "Pause Loop" : "Play Loop"}
-                  >
-                    {isPlaylistPlaying ? <Pause size={12} className="fill-amber-300" /> : <Play size={12} className="fill-amber-300" />}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      if (currentPlaylistIndex !== null) {
-                        const nextIdx = currentPlaylistIndex === playlist.length - 1 ? 0 : currentPlaylistIndex + 1;
-                        playPlaylistItem(nextIdx);
-                      } else {
-                        playPlaylistItem(0);
-                      }
-                      audio.playSparkle('click');
-                    }}
-                    className="p-1 rounded-full hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
-                    title="Next Recitation"
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-
-                {/* Queue status details */}
-                <div className="text-right flex flex-col justify-center">
-                  <span className="text-[9px] text-slate-500 font-mono leading-none">
-                    {currentPlaylistIndex !== null ? `Playing ${currentPlaylistIndex + 1} of ${playlist.length}` : 'Loop Idle'}
-                  </span>
-                  {currentPlaylistIndex !== null && (
-                    <span className="text-[10px] font-bold text-amber-400 font-sans tracking-wide leading-none mt-1 animate-pulse">
-                      {namesOfAllah.find(n => n.id === playlist[currentPlaylistIndex])?.transliteration}
+                <div className="flex items-center gap-1 font-display font-medium text-[9px] md:text-[10px] tracking-wider">
+                  <span>{tab.label}</span>
+                  {tab.count !== undefined && (
+                    <span className={`text-[8px] px-1 rounded-full font-mono font-bold ${
+                      isActive 
+                        ? isLight ? 'bg-amber-500/20 text-amber-900' : 'bg-amber-400/20 text-amber-200' 
+                        : isLight ? 'bg-slate-200 text-slate-500' : 'bg-white/5 text-slate-500'
+                    }`}>
+                      {tab.count}
                     </span>
                   )}
                 </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* SLIDING VIEWPORT */}
+        <div className="flex-1 overflow-hidden relative w-full h-full flex flex-col">
+          <div 
+            className="flex-1 flex flex-row transition-transform duration-500 ease-out transform-gpu h-full"
+            style={{ 
+              width: '300%',
+              transform: activeSidebarTab === 'directory' ? 'translateX(0%)' : activeSidebarTab === 'dhikr' ? 'translateX(-33.33333%)' : 'translateX(-66.66667%)' 
+            }}
+          >
+            {/* PANE 1: DIRECTORY (Search & Filter + Names list) */}
+            <div className="w-[33.33333%] h-full flex flex-col overflow-hidden shrink-0">
+              {/* FILTER & SEARCH SUITE */}
+              <div className={`p-4 flex flex-col gap-3 border-b shrink-0 ${isLight ? 'border-slate-200 bg-slate-50/70' : 'border-white/5 bg-black/20'}`}>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className={`w-full border rounded-full pl-9 pr-8 py-2.5 text-xs transition-colors font-sans focus:outline-none ${
+                        isLight 
+                          ? 'bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-amber-600/50 shadow-sm' 
+                          : 'bg-white/5 border-white/10 text-[#e0e0e0] placeholder-gray-600 focus:border-amber-500/50'
+                      }`}
+                      placeholder="Search names..."
+                    />
+                    {searchQuery && (
+                      <button 
+                        onClick={() => setSearchQuery('')}
+                        className={`absolute right-3.5 top-1/2 -translate-y-1/2 ${isLight ? 'text-slate-400 hover:text-slate-700' : 'text-gray-400 hover:text-white'}`}
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      const randomId = Math.floor(Math.random() * 99) + 1;
+                      const item = namesOfAllah.find(n => n.id === randomId);
+                      if (item) {
+                        setSelectedName(item);
+                        audio.playNameAudio(item.transliteration, item.name, item.id);
+                        audio.playSparkle('click');
+                        triggerToast(`Selected Name #${item.id}: ${item.transliteration}`, "Daily Inspiration");
+                      }
+                    }}
+                    title="Daily Inspiration (Random Reflection)"
+                    className="px-3 rounded-full bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 hover:text-amber-200 flex items-center justify-center gap-1.5 transition-all text-[11px] font-mono tracking-wider active:scale-95 whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    <span>🎲</span>
+                    <span className="hidden sm:inline">Random</span>
+                  </button>
+                </div>
+
+                {/* Category Horizontal scroll */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 no-scrollbar scroll-smooth">
+                  {['All', 'Mercy', 'Majesty', 'Wisdom', 'Power', 'Justice', 'Protection', 'Generosity'].map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => {
+                        setSelectedCategory(cat);
+                        audio.playSparkle('hover');
+                      }}
+                      className={`px-3 py-1 rounded-full text-[10px] font-mono tracking-wide capitalize shrink-0 border transition-all cursor-pointer ${
+                        selectedCategory === cat
+                          ? isLight
+                            ? 'bg-amber-600/15 border-amber-500/40 text-amber-800 font-semibold'
+                            : 'bg-amber-500/15 border-amber-500/40 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.1)]'
+                          : isLight
+                            ? 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                            : 'bg-white/5 border-white/10 text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
+                {/* List Display Filter Toggles */}
+                <div className={`grid grid-cols-3 gap-1 p-1 rounded-lg border text-[10px] font-mono ${isLight ? 'bg-slate-100 border-slate-200/80' : 'bg-black/40 border-white/10'}`}>
+                  <button
+                    onClick={() => {
+                      setFilterMode('all');
+                      audio.playSparkle('hover');
+                    }}
+                    className={`py-1 rounded text-center transition-all cursor-pointer ${
+                      filterMode === 'all'
+                        ? isLight
+                          ? 'bg-white text-amber-800 shadow-sm font-bold border border-slate-200'
+                          : 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold'
+                        : isLight
+                          ? 'text-slate-500 hover:text-slate-800'
+                          : 'text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    All Names
+                  </button>
+                  <button
+                    onClick={() => {
+                      setFilterMode('favorites');
+                      audio.playSparkle('hover');
+                    }}
+                    className={`py-1 rounded text-center flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                      filterMode === 'favorites'
+                        ? isLight
+                          ? 'bg-white text-amber-800 shadow-sm font-bold border border-slate-200'
+                          : 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold'
+                        : isLight
+                          ? 'text-slate-500 hover:text-slate-800'
+                          : 'text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    <Star size={10} className="text-amber-400 fill-amber-400" /> ({favorites.length})
+                  </button>
+                  <button
+                    onClick={() => {
+                      setFilterMode('completed');
+                      audio.playSparkle('hover');
+                    }}
+                    className={`py-1 rounded text-center flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                      filterMode === 'completed'
+                        ? isLight
+                          ? 'bg-white text-amber-800 shadow-sm font-bold border border-slate-200'
+                          : 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold'
+                        : isLight
+                          ? 'text-slate-500 hover:text-slate-800'
+                          : 'text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    <CheckSquare size={10} className="text-emerald-500" /> ({completed.length})
+                  </button>
+                </div>
               </div>
 
-              {/* Dynamic category-based quick build buttons */}
-              <div className="flex flex-col gap-1.5 mt-1 border-t border-white/5 pt-2">
-                <span className="text-[8px] font-mono tracking-wider text-gray-500 uppercase font-bold">
-                  Queue Category Preset:
-                </span>
-                <div className="flex flex-wrap gap-1">
-                  {['All', 'Mercy', 'Majesty', 'Wisdom', 'Power', 'Justice', 'Protection', 'Generosity', 'Favorites'].map(cat => {
-                    const count = cat === 'All' 
-                      ? 99 
-                      : cat === 'Favorites' 
-                        ? favorites.length 
-                        : namesOfAllah.filter(n => n.category === cat).length;
+              {/* DIRECTORY DIRECT ROUTER DIRECT LIST */}
+              <div className="flex-1 overflow-y-auto py-2">
+                {filteredList.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-500 text-xs px-6 text-center gap-2">
+                    <HelpCircle size={24} />
+                    <span>No matching divine names found. Clear searches or filter to show more.</span>
+                  </div>
+                ) : (
+                  filteredList.map(item => {
+                    const isSelected = selectedName?.id === item.id;
+                    const isFav = favorites.includes(item.id);
+                    const isComp = completed.includes(item.id);
+
                     return (
-                      <button
-                        key={cat}
-                        onClick={() => queueCategory(cat)}
-                        className="px-1.5 py-1 rounded bg-white/5 border border-white/5 hover:border-amber-500/20 hover:bg-amber-500/10 text-[9px] font-mono text-slate-400 hover:text-amber-300 transition-all flex items-center gap-1 active:scale-95 shrink-0"
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          setSelectedName(item);
+                          audio.playNameAudio(item.transliteration, item.name, item.id);
+                        }}
+                        className={`group flex items-center justify-between px-5 py-3.5 border-b cursor-pointer transition-all ${
+                          isLight ? 'border-slate-100' : 'border-white/5'
+                        } ${
+                          isSelected 
+                            ? isLight
+                              ? 'bg-amber-500/10 border-l-2 border-l-amber-600 shadow-[inset_10px_0_15px_-10px_rgba(245,158,11,0.15)]'
+                              : 'bg-amber-500/10 border-l-2 border-l-amber-500 shadow-[inset_10px_0_15px_-10px_rgba(245,158,11,0.2)]' 
+                            : isLight
+                              ? 'hover:bg-slate-100 border-l-2 border-l-transparent'
+                              : 'hover:bg-white/5 border-l-2 border-l-transparent'
+                        }`}
                       >
-                        <span>{cat === 'Favorites' ? '⭐' : cat === 'All' ? '✨' : '🏷️'}</span>
-                        <span>{cat}</span>
-                        <span className="text-[7px] text-slate-500">({count})</span>
+                        <div className="flex items-center gap-3">
+                          <span className={`font-mono text-[10px] w-5 ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>
+                            {String(item.id).padStart(2, '0')}
+                          </span>
+                          <div className="flex flex-col">
+                            <span className={`text-xs font-medium tracking-wide transition-colors ${
+                              isLight 
+                                ? 'text-slate-800 group-hover:text-amber-800' 
+                                : 'text-amber-50 group-hover:text-amber-300'
+                            }`}>{item.transliteration}</span>
+                            <span className={`text-[9px] font-mono tracking-wider ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>{item.english}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          {/* Visual Calligraphy label */}
+                          <span className={`font-arabic text-lg tracking-wide ${isLight ? 'text-amber-800/90' : 'text-amber-200/90'}`}>
+                            {item.name}
+                          </span>
+
+                          {/* Status & Play Icons */}
+                          <div className="flex items-center gap-2 pointer-events-auto">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                togglePlaylist(item.id);
+                              }}
+                              className={`p-1 rounded-full transition-all border cursor-pointer ${
+                                playlist.includes(item.id)
+                                  ? 'bg-amber-400/20 border-amber-400/50 text-amber-600 shadow-[0_0_8px_rgba(245,158,11,0.15)]'
+                                  : isLight
+                                    ? 'bg-slate-100 border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-200'
+                                    : 'bg-white/5 border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/10'
+                              }`}
+                              title={playlist.includes(item.id) ? "Remove from Queue" : "Add to Queue"}
+                            >
+                              <ListPlus size={10} />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                audio.playNameAudio(item.transliteration, item.name, item.id);
+                              }}
+                              className={`p-1 rounded-full transition-all border cursor-pointer ${
+                                isLight
+                                  ? 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-800'
+                                  : 'bg-amber-500/10 hover:bg-amber-500/35 text-amber-300 hover:text-amber-200 border border-amber-500/25'
+                              }`}
+                              title={`Listen to ${item.transliteration}`}
+                            >
+                              <Play size={10} className={isLight ? "fill-amber-700 text-amber-700" : "fill-amber-400 text-amber-400"} />
+                            </button>
+                            {isFav && <Star size={9} className="fill-amber-500 text-amber-500" />}
+                            {isComp && <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" title="Completed" />}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* PANE 2: DHIKR LOOP (Queue loop player & Recently viewed) */}
+            <div className="w-[33.33333%] h-full flex flex-col overflow-y-auto shrink-0">
+              {/* RECITATION PLAYLIST PLAYER */}
+              <div className={`px-5 py-4 border-b flex flex-col gap-3 shrink-0 ${isLight ? 'border-slate-200 bg-slate-100/60' : 'border-white/5 bg-black/35'}`}>
+                <div className="flex items-center justify-between">
+                  <span className={`text-[10px] font-display tracking-wider uppercase font-bold flex items-center gap-1.5 ${isLight ? 'text-amber-800' : 'text-amber-200/90'}`}>
+                    <Music size={11} className={`text-amber-600 ${isPlaylistPlaying ? 'animate-spin' : 'animate-pulse'}`} />
+                    Recitation Loop Queue ({playlist.length})
+                  </span>
+                  {playlist.length > 0 && (
+                    <button 
+                      onClick={() => {
+                        setIsPlaylistPlaying(false);
+                        setCurrentPlaylistIndex(null);
+                        setPlaylist([]);
+                        triggerToast("Recitation loop queue cleared.", "Playlist Queue");
+                      }}
+                      className="text-[9px] font-mono text-rose-500 hover:text-rose-600 uppercase tracking-widest transition-colors cursor-pointer"
+                    >
+                      Clear Queue
+                    </button>
+                  )}
+                </div>
+
+                {playlist.length === 0 ? (
+                  <div className={`py-4 px-3 rounded-xl border border-dashed text-[10px] text-center font-mono select-none ${
+                    isLight 
+                      ? 'border-slate-300 bg-white text-slate-500 shadow-sm' 
+                      : 'border-white/10 bg-white/5 text-slate-400'
+                  }`}>
+                    No names queued. Go to Directory tab to add individual names, or click below to load a category preset.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {/* Media Controls */}
+                    <div className={`flex items-center justify-between rounded-xl p-3 border ${
+                      isLight 
+                        ? 'bg-white border-slate-200 shadow-sm' 
+                        : 'bg-black/50 border-white/5 shadow-inner'
+                    }`}>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => {
+                            if (currentPlaylistIndex !== null) {
+                              const prevIdx = currentPlaylistIndex === 0 ? playlist.length - 1 : currentPlaylistIndex - 1;
+                              playPlaylistItem(prevIdx);
+                            } else {
+                              playPlaylistItem(0);
+                            }
+                            audio.playSparkle('click');
+                          }}
+                          className={`p-1.5 rounded-full transition-colors cursor-pointer ${
+                            isLight 
+                              ? 'hover:bg-slate-100 text-slate-500 hover:text-slate-800' 
+                              : 'hover:bg-white/10 text-slate-400 hover:text-white'
+                          }`}
+                          title="Previous Recitation"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            if (isPlaylistPlaying) {
+                              setIsPlaylistPlaying(false);
+                              triggerToast("Recitation loop paused.", "Recitation Queue");
+                            } else {
+                              setIsPlaylistPlaying(true);
+                              playPlaylistItem(currentPlaylistIndex !== null ? currentPlaylistIndex : 0);
+                              triggerToast("Starting recitation loop...", "Recitation Queue");
+                            }
+                            audio.playSparkle('click');
+                          }}
+                          className={`p-2 rounded-full transition-all cursor-pointer ${
+                            isLight
+                              ? 'bg-amber-500/10 border border-amber-500/35 text-amber-800 hover:bg-amber-500/20'
+                              : 'bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/35'
+                          }`}
+                          title={isPlaylistPlaying ? "Pause Loop" : "Play Loop"}
+                        >
+                          {isPlaylistPlaying ? <Pause size={14} className={isLight ? "fill-amber-700" : "fill-amber-300"} /> : <Play size={14} className={isLight ? "fill-amber-700" : "fill-amber-300"} />}
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            if (currentPlaylistIndex !== null) {
+                              const nextIdx = currentPlaylistIndex === playlist.length - 1 ? 0 : currentPlaylistIndex + 1;
+                              playPlaylistItem(nextIdx);
+                            } else {
+                              playPlaylistItem(0);
+                            }
+                            audio.playSparkle('click');
+                          }}
+                          className={`p-1.5 rounded-full transition-colors cursor-pointer ${
+                            isLight 
+                              ? 'hover:bg-slate-100 text-slate-500 hover:text-slate-800' 
+                              : 'hover:bg-white/10 text-slate-400 hover:text-white'
+                          }`}
+                          title="Next Recitation"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+
+                      {/* Queue status details */}
+                      <div className="text-right flex flex-col justify-center">
+                        <span className={`text-[9px] font-mono leading-none ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                          {currentPlaylistIndex !== null ? `Playing ${currentPlaylistIndex + 1} of ${playlist.length}` : 'Loop Idle'}
+                        </span>
+                        {currentPlaylistIndex !== null && (
+                          <span className={`text-[11px] font-bold font-sans tracking-wide leading-none mt-1.5 animate-pulse ${
+                            isLight ? 'text-amber-800' : 'text-amber-400'
+                          }`}>
+                            {namesOfAllah.find(n => n.id === playlist[currentPlaylistIndex])?.transliteration}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Dhikr Mode Interval Timer Controls */}
+                    <div className={`flex items-center justify-between pt-3.5 text-[10px] font-mono border-t ${isLight ? 'border-slate-200 text-slate-600' : 'border-white/5 text-slate-400'}`}>
+                      <span className="uppercase tracking-wider text-[8px] font-bold">Dhikr Chanting Pause:</span>
+                      <select
+                        value={dhikrInterval}
+                        onChange={(e) => {
+                          setDhikrInterval(Number(e.target.value));
+                          audio.playSparkle('click');
+                        }}
+                        className={`rounded-md px-2 py-0.5 focus:outline-none cursor-pointer text-[10px] border ${
+                          isLight 
+                            ? 'bg-white border-slate-300 text-amber-900 focus:border-amber-600/50 shadow-sm' 
+                            : 'bg-black/60 border-white/10 text-amber-300 focus:border-amber-500/50'
+                        }`}
+                      >
+                        <option value={0}>Gapless (0s)</option>
+                        <option value={1}>1 Second</option>
+                        <option value={3}>3 Seconds</option>
+                        <option value={5}>5 Seconds</option>
+                        <option value={10}>10 Seconds</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Dynamic category-based quick build buttons */}
+                <div className={`flex flex-col gap-2 mt-1 pt-3 shrink-0 border-t ${isLight ? 'border-slate-200' : 'border-white/5'}`}>
+                  <span className={`text-[9px] font-mono tracking-wider uppercase font-bold ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Queue Category Preset:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['All', 'Mercy', 'Majesty', 'Wisdom', 'Power', 'Justice', 'Protection', 'Generosity', 'Favorites'].map(cat => {
+                      const count = cat === 'All' 
+                        ? 99 
+                        : cat === 'Favorites' 
+                          ? favorites.length 
+                          : namesOfAllah.filter(n => n.category === cat).length;
+                      return (
+                        <button
+                          key={cat}
+                          onClick={() => queueCategory(cat)}
+                          className={`px-2 py-1.5 rounded text-[9px] font-mono transition-all flex items-center gap-1 active:scale-95 shrink-0 cursor-pointer border ${
+                            isLight
+                              ? 'bg-white border-slate-200 text-slate-600 hover:border-amber-600/30 hover:bg-amber-500/5 hover:text-amber-900 shadow-sm'
+                              : 'bg-white/5 border border-white/5 hover:border-amber-500/25 hover:bg-amber-500/10 text-slate-400 hover:text-amber-300'
+                          }`}
+                        >
+                          <span>{cat === 'Favorites' ? '⭐' : cat === 'All' ? '✨' : '🏷️'}</span>
+                          <span>{cat}</span>
+                          <span className={isLight ? 'text-slate-400' : 'text-slate-500'}>({count})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* CUSTOM WIRD (LITANY) PLAYLISTS */}
+              <div className={`px-5 py-4 border-b flex flex-col gap-3 shrink-0 ${isLight ? 'border-slate-200' : 'border-white/5'}`}>
+                <div className="flex items-center justify-between">
+                  <span className={`text-[10px] font-display tracking-wider uppercase font-bold flex items-center gap-1.5 ${isLight ? 'text-amber-800' : 'text-amber-200/90'}`}>
+                    <Layers size={11} className="text-amber-500" />
+                    Custom Wird (Litanies) ({customPlaylists.length})
+                  </span>
+                  {!isCreatingPlaylist && playlist.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setIsCreatingPlaylist(true);
+                        audio.playSparkle('click');
+                      }}
+                      className="text-[9px] font-mono text-amber-500 hover:text-amber-600 uppercase tracking-widest font-bold transition-colors cursor-pointer"
+                    >
+                      + Save Queue
+                    </button>
+                  )}
+                </div>
+
+                {isCreatingPlaylist && (
+                  <div className={`p-3 rounded-xl border flex flex-col gap-2 ${
+                    isLight ? 'bg-white border-slate-200' : 'bg-white/5 border-white/5'
+                  }`}>
+                    <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">Name your custom litany:</span>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="e.g. Morning Protection"
+                        value={newPlaylistName}
+                        onChange={(e) => setNewPlaylistName(e.target.value)}
+                        className={`flex-1 px-2.5 py-1 text-xs rounded border focus:outline-none ${
+                          isLight 
+                            ? 'bg-slate-50 border-slate-300 text-slate-800 focus:border-amber-500' 
+                            : 'bg-black/40 border-white/10 text-white focus:border-amber-500'
+                        }`}
+                      />
+                      <button
+                        onClick={() => saveCurrentQueueAsPlaylist(newPlaylistName)}
+                        className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-mono text-[9px] font-bold uppercase rounded cursor-pointer transition-colors"
+                      >
+                        Save
                       </button>
+                      <button
+                        onClick={() => {
+                          setIsCreatingPlaylist(false);
+                          setNewPlaylistName('');
+                          audio.playSparkle('click');
+                        }}
+                        className={`px-2.5 py-1 font-mono text-[9px] uppercase rounded border cursor-pointer ${
+                          isLight ? 'border-slate-300 text-slate-600' : 'border-white/10 text-slate-400'
+                        }`}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-1.5 max-h-[180px] overflow-y-auto pr-1">
+                  {customPlaylists.map(p => (
+                    <div
+                      key={p.id}
+                      className={`px-3 py-2 rounded-xl border flex items-center justify-between group transition-all ${
+                        isLight
+                          ? 'bg-white border-slate-200 hover:border-amber-600/30 shadow-sm'
+                          : 'bg-white/5 border-white/5 hover:border-amber-500/25'
+                      }`}
+                    >
+                      <div className="flex flex-col gap-0.5">
+                        <span className={`text-xs font-semibold leading-tight ${isLight ? 'text-slate-800' : 'text-amber-50'}`}>{p.name}</span>
+                        <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest">{p.nameIds.length} Divine Names</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => loadCustomPlaylist(p.nameIds, p.name)}
+                          className="p-1 rounded-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 hover:text-amber-600 transition-colors cursor-pointer"
+                          title="Load and chant this Litany"
+                        >
+                          <Play size={10} className="fill-amber-500" />
+                        </button>
+                        {p.id !== 'morning_protection' && p.id !== 'hardship_relief' && (
+                          <button
+                            onClick={() => deleteCustomPlaylist(p.id)}
+                            className="p-1 rounded-full text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            title="Delete custom litany"
+                          >
+                            <X size={10} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* RECENTLY VIEWED SECTION */}
+              {recentlyViewed.length > 0 && (
+                <div className={`px-5 py-4 flex flex-col gap-2.5 shrink-0 ${isLight ? 'bg-slate-50' : 'bg-black/15'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[10px] font-display tracking-wider uppercase font-bold flex items-center gap-1.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                      <Clock size={11} className="text-amber-500" />
+                      Recently Viewed
+                    </span>
+                    <button 
+                      onClick={() => setRecentlyViewed([])}
+                      className="text-[9px] font-mono text-gray-500 hover:text-amber-600 uppercase tracking-widest transition-colors cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {recentlyViewed.map(id => {
+                      const item = namesOfAllah.find(n => n.id === id);
+                      if (!item) return null;
+                      const isSelected = selectedName?.id === item.id;
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => {
+                            setSelectedName(item);
+                            audio.playNameAudio(item.transliteration, item.name, item.id);
+                            audio.playSparkle('click');
+                          }}
+                          className={`px-4 py-2.5 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
+                            isSelected
+                              ? isLight
+                                ? 'bg-amber-500/15 border-amber-500/30 text-amber-900 font-semibold'
+                                : 'bg-amber-500/10 border-amber-500/40 text-amber-200'
+                              : isLight
+                                ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-sm'
+                                : 'bg-white/5 border-white/5 text-slate-350 hover:bg-white/10 hover:text-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span className="font-mono text-[9px] text-slate-500">#{String(item.id).padStart(2, '0')}</span>
+                            <span className="text-xs font-semibold tracking-wide">{item.transliteration}</span>
+                          </div>
+                          <span className={`font-arabic text-sm ${isLight ? 'text-amber-800/90' : 'text-amber-200/90'}`}>{item.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* PANE 3: INSIGHTS & STATS (Memorization Goal + Streaks + Quick Access) */}
+            <div className="w-[33.33333%] h-full flex flex-col overflow-y-auto p-5 gap-4 shrink-0 overflow-x-hidden">
+              {/* MEMORIZATION PROGRESS METRIC CARD */}
+              <div className={`p-4.5 rounded-2xl border flex flex-col gap-3.5 shadow-lg relative overflow-hidden group ${isLight ? 'border-slate-200 bg-white' : 'border-white/5 bg-black/35'}`}>
+                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent pointer-events-none" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full border border-amber-500/20 bg-amber-500/5 flex items-center justify-center text-amber-600 shadow-inner">
+                      <Award size={20} />
+                    </div>
+                    <div>
+                      <span className={`text-xs font-semibold font-display ${isLight ? 'text-slate-800' : 'text-amber-50/90'}`}>Memorization Goals</span>
+                      <span className={`font-mono text-[9px] block mt-0.5 ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>{completed.length} / 99 completed</span>
+                    </div>
+                  </div>
+
+                  {/* Radial/Bar Visualizer */}
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <div className={`w-20 rounded-full h-1.5 overflow-hidden border ${isLight ? 'bg-slate-100 border-slate-200' : 'bg-black border-white/10'}`}>
+                      <div 
+                        className="bg-amber-500 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-[10px] text-emerald-500 font-bold">{progressPercent}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Consistency Streak Card */}
+              <div className={`border rounded-2xl p-4 flex items-center justify-between shadow-lg relative overflow-hidden group ${
+                isLight ? 'border-slate-200 bg-white' : 'border-white/5 bg-black/25'
+              }`}>
+                <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 to-transparent pointer-events-none" />
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full border border-amber-500/20 bg-amber-500/5 flex items-center justify-center text-amber-500 text-lg">
+                    🔥
+                  </div>
+                  <div>
+                    <span className={`text-xs font-semibold font-display ${isLight ? 'text-slate-800' : 'text-amber-50'}`}>Consistent Streak</span>
+                    <span className={`text-[10px] block font-mono mt-0.5 ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>Track daily recitation Streaks</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className={`text-2xl font-light font-sans ${isLight ? 'text-amber-800' : 'text-amber-400'}`}>{getStreaks().current}</span>
+                  <span className="text-[10px] text-gray-500 font-mono block leading-none mt-0.5">Days</span>
+                </div>
+              </div>
+
+              {/* Leitner Box Statistics */}
+              <div className={`border rounded-2xl p-4 flex flex-col gap-3 shadow-lg ${isLight ? 'border-slate-200 bg-white' : 'border-white/5 bg-black/25'}`}>
+                <span className={`text-[10px] font-mono tracking-wider uppercase font-bold ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>Leitner Memorizer Box Status</span>
+                <div className="grid grid-cols-5 gap-1.5 text-center font-mono">
+                  {[1, 2, 3, 4, 5].map((boxNum) => {
+                    const count = Object.values(leitnerBoxes).filter(b => b === boxNum).length;
+                    return (
+                      <div key={boxNum} className={`border p-2 rounded-lg flex flex-col gap-1 ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-black/40 border-white/5'}`}>
+                        <span className="text-[9px] text-slate-500">Box {boxNum}</span>
+                        <span className={`text-xs font-bold ${isLight ? 'text-amber-800' : 'text-amber-400'}`}>{count}</span>
+                      </div>
                     );
                   })}
                 </div>
               </div>
-            </div>
-          )}
-        </div>
 
-        {/* DIRECTORY DIRECT ROUTER DIRECT LIST */}
-        <div className="flex-1 overflow-y-auto no-scrollbar py-2">
-          {filteredList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-500 text-xs px-6 text-center gap-2">
-              <HelpCircle size={24} />
-              <span>No matching divine names found. Clear searches or filter to show more.</span>
-            </div>
-          ) : (
-            filteredList.map(item => {
-              const isSelected = selectedName?.id === item.id;
-              const isFav = favorites.includes(item.id);
-              const isComp = completed.includes(item.id);
-
-              return (
-                <div
-                  key={item.id}
+              {/* Quick Actions Panel */}
+              <div className={`border rounded-2xl p-4 flex flex-col gap-2.5 shadow-lg ${isLight ? 'border-slate-200 bg-white' : 'border-white/5 bg-black/25'}`}>
+                <span className={`text-[10px] font-mono tracking-wider uppercase font-bold mb-0.5 ${isLight ? 'text-slate-650' : 'text-slate-400'}`}>Spiritual Modules</span>
+                
+                <button
                   onClick={() => {
-                    setSelectedName(item);
-                    audio.playNameAudio(item.transliteration, item.name, item.id);
+                    setShowDashboardModal(true);
+                    audio.playSparkle('click');
                   }}
-                  className={`group flex items-center justify-between px-5 py-3.5 border-b border-white/5 cursor-pointer transition-all ${
-                    isSelected 
-                      ? 'bg-amber-500/10 border-l-2 border-l-amber-500 shadow-[inset_10px_0_15px_-10px_rgba(245,158,11,0.2)]' 
-                      : 'hover:bg-white/5 border-l-2 border-l-transparent'
-                  }`}
+                  className="w-full py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-800 hover:text-amber-900 font-mono text-[10px] tracking-wider uppercase font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-[10px] text-gray-500 w-5">
-                      {String(item.id).padStart(2, '0')}
-                    </span>
-                    <div className="flex flex-col">
-                      <span className="text-xs font-medium text-amber-50 tracking-wide group-hover:text-amber-300 transition-colors">{item.transliteration}</span>
-                      <span className="text-[9px] text-gray-400 font-mono tracking-wider">{item.english}</span>
-                    </div>
-                  </div>
+                  📊 Spiritual Dashboard
+                </button>
 
-                  <div className="flex items-center gap-3">
-                    {/* Visual Calligraphy label */}
-                    <span className="font-arabic text-lg text-amber-200/90 tracking-wide">
-                      {item.name}
-                    </span>
+                <button
+                  onClick={() => {
+                    setShowFlashcardsModal(true);
+                    audio.playSparkle('click');
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-700 hover:text-purple-900 font-mono text-[10px] tracking-wider uppercase font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
+                >
+                  🗂️ Leitner Flashcards
+                </button>
 
-                    {/* Status & Play Icons */}
-                    <div className="flex items-center gap-2 pointer-events-auto">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          togglePlaylist(item.id);
-                        }}
-                        className={`p-1 rounded-full transition-all border ${
-                          playlist.includes(item.id)
-                            ? 'bg-amber-400/20 border-amber-400/50 text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.15)]'
-                            : 'bg-white/5 border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/10'
-                        }`}
-                        title={playlist.includes(item.id) ? "Remove from Queue" : "Add to Queue"}
-                      >
-                        <ListPlus size={10} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          audio.playNameAudio(item.transliteration, item.name, item.id);
-                        }}
-                        className="p-1 rounded-full bg-amber-500/10 hover:bg-amber-500/35 text-amber-300 hover:text-amber-200 transition-all border border-amber-500/25"
-                        title={`Listen to ${item.transliteration}`}
-                      >
-                        <Play size={10} className="fill-amber-400 text-amber-400" />
-                      </button>
-                      {isFav && <Star size={9} className="fill-amber-400 text-amber-400" />}
-                      {isComp && <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" title="Completed" />}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
+                <button
+                  onClick={() => {
+                    setShowBadgesModal(true);
+                    audio.playSparkle('click');
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-700 hover:text-emerald-900 font-mono text-[10px] tracking-wider uppercase font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
+                >
+                  🏅 Spiritual Badges & Milestones
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowCertificateModal(true);
+                    audio.playSparkle('click');
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-800 hover:text-amber-900 font-mono text-[10px] tracking-wider uppercase font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer"
+                >
+                  🎓 Export Certificate
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -1309,6 +2510,9 @@ export default function App() {
           theme === 'rose' ? 'rose-glass-panel' :
           theme === 'ruby' ? 'ruby-glass-panel' :
           theme === 'nebula' ? 'nebula-glass-panel' :
+          theme === 'sapphire' ? 'sapphire-glass-panel' :
+          theme === 'amber' ? 'amber-glass-panel' :
+          theme === 'amethyst' ? 'amethyst-glass-panel' :
           'glass-panel'
         }`}>
           
@@ -1381,41 +2585,184 @@ export default function App() {
               </div>
             </div>
 
-            {/* TRANSLATIONS SECTION (English, Bengali) */}
-            <div className="flex flex-col gap-4 bg-black/40 backdrop-blur-xl p-5 border-l-2 border-amber-500/40 rounded-r-2xl border border-white/5 shadow-lg">
-              <div className="flex items-start gap-3">
-                <Globe size={18} className="text-amber-500 mt-1 shrink-0" />
-                <div className="flex flex-col">
-                  <span className="font-mono text-[9px] text-gray-500 uppercase tracking-widest leading-none mb-1">English Translation</span>
-                  <span className="text-lg font-light text-white tracking-wide">{selectedName.english}</span>
+            {/* SPECTACULAR DIGITAL TASBIH COUNTER OVERLAY */}
+            <div className="bg-gradient-to-b from-black/40 to-black/60 border border-white/10 rounded-2xl p-5 flex flex-col items-center justify-center gap-4.5 relative overflow-hidden shadow-xl group">
+              <div className="absolute inset-0 bg-amber-500/5 opacity-30 group-hover:opacity-40 transition-opacity pointer-events-none" />
+              
+              {/* Particle sparks container */}
+              <div className="absolute inset-0 pointer-events-none">
+                {tasbihParticles.map(p => (
+                  <span
+                    key={p.id}
+                    className="absolute w-2 h-2 rounded-full animate-ping animate-duration-1000"
+                    style={{
+                      left: `calc(50% + ${p.x}px)`,
+                      top: `calc(50% + ${p.y}px)`,
+                      backgroundColor: p.color,
+                      transform: 'translate(-50%, -50%)',
+                      boxShadow: `0 0 8px ${p.color}`
+                    }}
+                  />
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between w-full font-mono text-[10px]">
+                <span className="text-slate-400 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+                  📿 Digital Tasbih Counter
+                </span>
+                
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">Target:</span>
+                  <select
+                    value={tasbihTarget}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTasbihTarget(val === 'free' ? 'free' : Number(val));
+                      setTasbihCount(0);
+                      audio.playSparkle('click');
+                    }}
+                    className="bg-black/50 border border-white/10 rounded px-1.5 py-0.5 text-amber-400 focus:outline-none cursor-pointer"
+                  >
+                    <option value={33}>33 times</option>
+                    <option value={100}>100 times</option>
+                    <option value="free">Continuous</option>
+                  </select>
                 </div>
               </div>
 
-              <div className="border-t border-white/5 pt-3 flex items-start gap-3">
-                <BookOpen size={18} className="text-amber-500/80 mt-1 shrink-0" />
-                <div className="flex flex-col">
-                  <span className="font-mono text-[9px] text-gray-500 uppercase tracking-widest leading-none mb-1">Bengali / বাংলা অর্থ</span>
-                  <span className="text-lg font-serif text-amber-400 font-light">{selectedName.bengali}</span>
+              {/* Central tactile circular trigger */}
+              <div className="relative flex items-center justify-center">
+                <div className="absolute w-36 h-36 border border-amber-500/10 rounded-full animate-ping pointer-events-none duration-1000" />
+                <div className="absolute w-32 h-32 border border-amber-500/20 rounded-full animate-pulse pointer-events-none" />
+                
+                <button
+                  onClick={incrementTasbih}
+                  className="w-28 h-28 rounded-full bg-gradient-to-tr from-amber-500/20 to-amber-400/10 border-2 border-amber-500/40 hover:border-amber-400 flex flex-col items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-amber-500/10 hover:shadow-amber-500/20 hover:scale-105 active:scale-95 transition-all relative z-10 focus:outline-none group/btn"
+                >
+                  <span className="font-mono text-3xl font-extrabold tracking-tight text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]">
+                    {tasbihCount}
+                  </span>
+                  <span className="text-[8px] font-mono tracking-widest text-slate-400 group-hover/btn:text-amber-200 uppercase">
+                    {tasbihTarget === 'free' ? 'Free Chant' : `of ${tasbihTarget}`}
+                  </span>
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between w-full font-mono text-[9px] text-slate-500">
+                <span>Tap circle or press [SPACEBAR]</span>
+                <button
+                  onClick={() => {
+                    setTasbihCount(0);
+                    audio.playSparkle('hover');
+                  }}
+                  className="hover:text-rose-400 transition-colors uppercase cursor-pointer"
+                >
+                  Reset count
+                </button>
+              </div>
+            </div>
+
+            {/* MULTI-LINGUAL LANGUAGE SELECTOR ROW */}
+            <div className="flex items-center justify-between bg-black/30 border border-white/5 rounded-xl px-4 py-2.5 text-xs font-mono">
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <Globe size={13} className="text-amber-500" />
+                <span>Tafsir Language:</span>
+              </div>
+              <select
+                value={selectedLanguage}
+                onChange={(e) => {
+                  setSelectedLanguage(e.target.value as any);
+                  audio.playSparkle('click');
+                }}
+                className="bg-black/65 border border-white/10 rounded px-2.5 py-1 text-xs text-amber-300 focus:border-amber-500/50 focus:outline-none cursor-pointer"
+              >
+                <option value="english">English (Original)</option>
+                <option value="bengali">Bengali / বাংলা</option>
+                <option value="urdu">Urdu / اردو</option>
+                <option value="indonesian">Indonesian / Bahasa</option>
+                <option value="turkish">Turkish / Türkçe</option>
+                <option value="french">French / Français</option>
+              </select>
+            </div>
+
+            {translationLoading ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-2.5 text-center text-slate-400 font-sans text-xs bg-black/40 border border-white/5 rounded-2xl">
+                <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                <span className="font-mono text-[9px] tracking-wider text-amber-300 uppercase animate-pulse">Translating Tafsir to {selectedLanguage.toUpperCase()}...</span>
+              </div>
+            ) : (
+              <>
+                {/* TRANSLATIONS SECTION */}
+                <div className="flex flex-col gap-4 bg-black/40 backdrop-blur-xl p-5 border-l-2 border-amber-500/40 rounded-r-2xl border border-white/5 shadow-lg">
+                  <div className="flex items-start gap-3">
+                    <Globe size={18} className="text-amber-500 mt-1 shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="font-mono text-[9px] text-gray-500 uppercase tracking-widest leading-none mb-1">
+                        {selectedLanguage === 'english' ? 'English Translation' : `${selectedLanguage.toUpperCase()} Translation`}
+                      </span>
+                      <div className="text-lg font-light tracking-wide leading-relaxed text-white">
+                        {selectedLanguage === 'english' ? (
+                          selectedName.english.split(' ').map((word, wordIdx) => {
+                            const isWordActive = activeWordIndex === wordIdx;
+                            return (
+                              <span 
+                                key={wordIdx} 
+                                className={`inline-block mr-1.5 transition-all duration-200 rounded px-0.5 ${
+                                  isWordActive 
+                                    ? 'bg-amber-500 text-black font-semibold shadow-[0_0_8px_rgba(245,158,11,0.5)] scale-110' 
+                                    : 'text-white'
+                                }`}
+                              >
+                                {word}
+                              </span>
+                            );
+                          })
+                        ) : selectedLanguage === 'bengali' ? (
+                          selectedName.english
+                        ) : (
+                          translationCache[selectedName.id]?.[selectedLanguage]?.meaning || selectedName.english
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-white/5 pt-3 flex items-start gap-3">
+                    <BookOpen size={18} className="text-amber-500/80 mt-1 shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="font-mono text-[9px] text-gray-500 uppercase tracking-widest leading-none mb-1">Bengali / বাংলা অর্থ</span>
+                      <span className="text-lg font-serif text-amber-400 font-light">{selectedName.bengali}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* DEEP THEOLOGICAL EXPLANATION */}
-            <div className="flex flex-col gap-1.5">
-              <h5 className="font-mono text-[9px] text-gray-500 uppercase tracking-[0.2em]">Theological Depth</h5>
-              <p className="text-xs text-gray-400 leading-relaxed font-sans bg-black/20 p-4 rounded-xl border border-white/5 shadow-inner">
-                {selectedName.explanation}
-              </p>
-            </div>
+                {/* DEEP THEOLOGICAL EXPLANATION */}
+                <div className="flex flex-col gap-1.5">
+                  <h5 className="font-mono text-[9px] text-gray-500 uppercase tracking-[0.2em]">Theological Depth ({selectedLanguage.toUpperCase()})</h5>
+                  <p className="text-xs text-gray-400 leading-relaxed font-sans bg-black/20 p-4 rounded-xl border border-white/5 shadow-inner">
+                    {selectedLanguage === 'english' 
+                      ? selectedName.explanation 
+                      : selectedLanguage === 'bengali' 
+                        ? `${selectedName.explanation} (বাংলা তফসির চাহিদার ভিত্তিতে লোড করা হচ্ছে)` 
+                        : translationCache[selectedName.id]?.[selectedLanguage]?.explanation || selectedName.explanation}
+                  </p>
+                </div>
 
-            {/* RECITATION BENEFITS */}
-            <div className="flex flex-col gap-1.5">
-              <h5 className="font-mono text-[9px] text-amber-500/60 uppercase tracking-[0.2em]">Spiritual Blessings</h5>
-              <div className="flex items-start gap-3 bg-amber-950/20 border border-amber-500/30 rounded-xl p-4 text-xs text-amber-100/90 leading-relaxed shadow-lg">
-                <Sparkles size={16} className="mt-0.5 text-amber-400 shrink-0 animate-pulse" />
-                <span>{selectedName.benefits}</span>
-              </div>
-            </div>
+                {/* RECITATION BENEFITS */}
+                <div className="flex flex-col gap-1.5">
+                  <h5 className="font-mono text-[9px] text-amber-500/60 uppercase tracking-[0.2em]">Spiritual Blessings ({selectedLanguage.toUpperCase()})</h5>
+                  <div className="flex items-start gap-3 bg-amber-950/20 border border-amber-500/30 rounded-xl p-4 text-xs text-amber-100/90 leading-relaxed shadow-lg">
+                    <Sparkles size={16} className="mt-0.5 text-amber-400 shrink-0 animate-pulse" />
+                    <span>
+                      {selectedLanguage === 'english' 
+                        ? selectedName.benefits 
+                        : selectedLanguage === 'bengali' 
+                          ? selectedName.benefits 
+                          : translationCache[selectedName.id]?.[selectedLanguage]?.benefits || selectedName.benefits}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* AI MEDITATIVE REFLECTION */}
             <div className="flex flex-col gap-2.5 border border-purple-500/20 bg-purple-950/5 rounded-2xl p-4.5 shadow-lg">
@@ -1468,6 +2815,138 @@ export default function App() {
               {meditationText && !meditationLoading && (
                 <p className="text-xs text-purple-100/90 leading-relaxed font-sans italic pl-3 border-l-2 border-purple-500/40 py-1 bg-purple-500/5 rounded-r-lg p-2.5">
                   "{meditationText}"
+                </p>
+              )}
+            </div>
+
+            {/* Audio Customizations & Qari Suite */}
+            <div className="grid grid-cols-2 gap-2.5 bg-white/5 border border-white/5 rounded-2xl p-4 text-[11px] font-mono">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-slate-400 uppercase tracking-wider text-[8px] font-bold">Select Qari / Recital</span>
+                <select
+                  value={qariStyle}
+                  onChange={(e) => {
+                    setQariStyle(e.target.value as any);
+                    audio.playSparkle('click');
+                  }}
+                  className="bg-black/60 border border-white/10 rounded-lg px-2 py-1.5 text-amber-300 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+                >
+                  <option value="celestial">Celestial Chimes</option>
+                  <option value="studio">Studio Vocal (HQ)</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-slate-400 uppercase tracking-wider text-[8px] font-bold">Translation Highlight</span>
+                <button
+                  onClick={() => {
+                    setTranslationSyncEnabled(!translationSyncEnabled);
+                    audio.playSparkle('click');
+                  }}
+                  className={`border rounded-lg px-2 py-1.5 text-center transition-all ${
+                    translationSyncEnabled 
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' 
+                      : 'bg-black/40 border-white/10 text-slate-400'
+                  }`}
+                >
+                  {translationSyncEnabled ? '● Synced' : '○ Disabled'}
+                </button>
+              </div>
+            </div>
+
+            {/* QURANIC REFERENCES & TAFSIR PANEL */}
+            <div className="flex flex-col gap-3 bg-black/40 border border-white/5 rounded-2xl p-5 shadow-lg">
+              <div className="flex items-center gap-2 border-b border-white/5 pb-2.5">
+                <BookOpen size={14} className="text-amber-400" />
+                <h5 className="font-mono text-[9px] text-amber-300 uppercase tracking-widest font-bold">Quranic Revelation & Scholarly Tafsir</h5>
+              </div>
+              
+              <div className="flex flex-col gap-4">
+                {getQuranReferences(selectedName.id, selectedName.transliteration).map((ref, rIdx) => (
+                  <div key={rIdx} className="flex flex-col gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
+                    <span className="font-arabic text-right text-lg text-amber-100/95 leading-relaxed font-light">{ref.verseAr}</span>
+                    <p className="text-xs text-slate-200 italic font-light">"{ref.verseEn}"</p>
+                    <div className="flex items-center justify-between border-t border-white/5 pt-2 mt-1">
+                      <span className="text-[9px] font-mono text-amber-500/70">{ref.citation}</span>
+                      <span className="text-[8px] font-mono text-slate-500 uppercase tracking-wider">Verse context</span>
+                    </div>
+                    <div className="bg-amber-950/10 border-l-2 border-amber-500/30 pl-2.5 py-1 text-[11px] text-slate-300 leading-relaxed font-sans mt-1.5">
+                      <strong className="text-amber-300/80 uppercase tracking-wider text-[8px] block font-mono mb-0.5 font-bold">Scholarly Tafsir:</strong>
+                      {ref.tafsir}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* PRIVATE REFLECTION JOURNAL SECTION */}
+            <div className="flex flex-col gap-3 bg-black/40 border border-white/5 rounded-2xl p-5 shadow-lg">
+              <div className="flex items-center gap-2 border-b border-white/5 pb-2.5 justify-between">
+                <div className="flex items-center gap-2">
+                  <Globe size={14} className="text-amber-400" />
+                  <h5 className="font-mono text-[9px] text-amber-300 uppercase tracking-widest font-bold">Private Spiritual Journal</h5>
+                </div>
+                <span className="text-[8px] font-mono text-slate-500 uppercase">Synced to Cloud</span>
+              </div>
+
+              {/* Reflection Entry Input */}
+              <div className="flex flex-col gap-2">
+                <textarea
+                  placeholder="How does this divine name speak to your heart during this phase of your life? Jot down your spiritual thoughts..."
+                  value={reflectionInput}
+                  onChange={(e) => setReflectionInput(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-xs text-slate-200 focus:outline-none focus:border-amber-500/50 min-h-[75px] resize-none font-sans placeholder-slate-600"
+                />
+                <button
+                  onClick={() => {
+                    if (!reflectionInput.trim()) return;
+                    saveReflection(reflectionInput);
+                    setReflectionInput('');
+                  }}
+                  disabled={!reflectionInput.trim()}
+                  className="w-full py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/35 text-amber-300 hover:text-amber-200 disabled:opacity-40 rounded-xl font-mono text-[10px] tracking-wider uppercase font-semibold transition-all cursor-pointer active:scale-95"
+                >
+                  Save Reflection Note
+                </button>
+              </div>
+
+              {/* Saved Notes Feed */}
+              {reflections[selectedName.id] && reflections[selectedName.id].length > 0 ? (
+                <div className="flex flex-col gap-2 mt-2 max-h-[220px] overflow-y-auto no-scrollbar">
+                  {reflections[selectedName.id].map((note, nIdx) => (
+                    <div key={nIdx} className="flex flex-col bg-white/5 p-3 rounded-xl border border-white/5 relative group">
+                      <p className="text-xs text-slate-300 leading-relaxed font-sans pr-6">"{note.text}"</p>
+                      <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/5">
+                        <span className="text-[9px] font-mono text-slate-500">
+                          {new Date(note.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setReflections(prev => {
+                              const updatedList = (prev[selectedName.id] || []).filter((_, idx) => idx !== nIdx);
+                              const updated = { ...prev, [selectedName.id]: updatedList };
+                              localStorage.setItem('user_reflections', JSON.stringify(updated));
+                              if (auth.currentUser) {
+                                setDoc(doc(db, 'user_data', auth.currentUser.uid), {
+                                  reflections: updated,
+                                  updatedAt: new Date().toISOString()
+                                }, { merge: true });
+                              }
+                              return updated;
+                            });
+                            triggerToast("Journal entry deleted.", "Journal Update");
+                            audio.playSparkle('click');
+                          }}
+                          className="text-[8px] font-mono text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity hover:underline"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[9px] font-mono text-slate-500 text-center py-2 italic">
+                  No private reflections recorded for this name yet.
                 </p>
               )}
             </div>
@@ -1556,6 +3035,204 @@ export default function App() {
         </section>
       )}
 
+      {/* FULL RECITATION PLAYER UI DECK */}
+      {playlist.length > 0 && currentPlaylistIndex !== null && (
+        <div 
+          className={`fixed bottom-24 md:bottom-28 left-1/2 -translate-x-1/2 z-40 max-w-lg w-[calc(100%-32px)] rounded-2xl border shadow-2xl backdrop-blur-2xl p-4 transition-all duration-300 transform-gpu animate-fade-in-up ${
+            theme === 'gold' ? 'gold-glass-panel border-amber-500/30 text-amber-100' :
+            theme === 'emerald' ? 'emerald-glass-panel border-emerald-500/30 text-emerald-100' :
+            theme === 'rose' ? 'rose-glass-panel border-fuchsia-500/30 text-rose-100' :
+            theme === 'ruby' ? 'ruby-glass-panel border-red-500/30 text-red-100' :
+            theme === 'nebula' ? 'nebula-glass-panel border-violet-500/30 text-violet-100' :
+            theme === 'sapphire' ? 'sapphire-glass-panel border-blue-500/30 text-blue-100' :
+            theme === 'amber' ? 'amber-glass-panel border-amber-500/30 text-amber-100' :
+            theme === 'amethyst' ? 'amethyst-glass-panel border-purple-500/30 text-purple-100' :
+            'glass-panel border-white/15 text-slate-100'
+          }`}
+        >
+          {/* Header Row */}
+          <div className="flex items-center justify-between border-b border-white/10 pb-2.5 mb-3">
+            <div className="flex items-center gap-2">
+              <div className={`p-1.5 rounded-lg bg-white/5 ${isPlaylistPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '8s' }}>
+                <Disc size={14} className="text-amber-400" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[9px] font-mono tracking-widest text-slate-400 uppercase font-bold">CELESTIAL PLAYER</span>
+                <span className="text-[8px] font-mono text-slate-500 -mt-0.5">Active Recitation Queue</span>
+              </div>
+            </div>
+
+            {/* Loop progress badge */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono bg-amber-500/10 border border-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full">
+                {currentPlaylistIndex + 1} of {playlist.length}
+              </span>
+              <button
+                onClick={() => {
+                  setIsPlaylistPlaying(false);
+                  setCurrentPlaylistIndex(null);
+                  triggerToast("Recitation loop stopped.", "Recitation Queue");
+                  audio.playSparkle('click');
+                }}
+                className="p-1 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-all cursor-pointer"
+                title="Stop Recitation & Exit Player"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* Body: Arabic calligraphy & details */}
+          <div className="flex items-center gap-4 bg-black/40 border border-white/5 rounded-xl p-3 shadow-inner mb-3">
+            {/* Arabic Circle */}
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-amber-500/5 to-amber-500/20 border border-amber-500/20 flex items-center justify-center shrink-0 shadow-lg relative overflow-hidden group">
+              <div className="absolute inset-0 bg-radial-gradient from-amber-500/10 to-transparent animate-pulse" />
+              <span className="text-3xl font-bold font-arabic text-amber-350 drop-shadow-[0_0_8px_rgba(245,158,11,0.55)] select-none z-10">
+                {namesOfAllah.find(n => n.id === playlist[currentPlaylistIndex])?.name}
+              </span>
+            </div>
+
+            {/* Text details */}
+            <div className="flex-1 min-w-0">
+              <span className="text-base font-bold font-display tracking-wide text-amber-50 truncate block leading-tight">
+                {namesOfAllah.find(n => n.id === playlist[currentPlaylistIndex])?.transliteration}
+              </span>
+              <span className="text-xs text-slate-300 font-sans italic truncate block leading-relaxed mt-0.5">
+                {namesOfAllah.find(n => n.id === playlist[currentPlaylistIndex])?.english}
+              </span>
+              <span className="text-[9px] font-mono text-slate-500 mt-1 flex items-center gap-1 uppercase">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                {namesOfAllah.find(n => n.id === playlist[currentPlaylistIndex])?.category} Aspect
+              </span>
+            </div>
+
+            {/* Audio Wave Visualizer */}
+            <div className="flex items-end gap-[3px] h-6 shrink-0 pr-1">
+              {[1, 2, 3, 4, 5, 6].map((b) => (
+                <div
+                  key={b}
+                  className={`w-[3px] rounded-full bg-amber-400 transition-all duration-300 ${isPlaylistPlaying ? 'animate-pulse' : 'h-1'}`}
+                  style={{
+                    height: isPlaylistPlaying ? `${Math.sin(b + Date.now() / 120) * 10 + 14}px` : '4px',
+                    animationDelay: `${b * 100}ms`,
+                    animationDuration: `${0.6 + b * 0.1}s`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Playback Progress Bar */}
+          <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden mb-3.5 border border-white/5">
+            <div 
+              className="bg-amber-400 h-full rounded-full transition-all duration-1000"
+              style={{ width: `${((currentPlaylistIndex + 1) / playlist.length) * 100}%` }}
+            />
+          </div>
+
+          {/* Controls row */}
+          <div className="flex items-center justify-between gap-4">
+            {/* Left: Previous/Play/Stop/Next */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const prevIdx = currentPlaylistIndex === 0 ? playlist.length - 1 : currentPlaylistIndex - 1;
+                  playPlaylistItem(prevIdx);
+                  audio.playSparkle('click');
+                }}
+                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 hover:border-white/10 active:scale-95 transition-all cursor-pointer"
+                title="Previous Divine Name"
+              >
+                <SkipBack size={14} className="fill-current" />
+              </button>
+
+              <button
+                onClick={() => {
+                  if (isPlaylistPlaying) {
+                    setIsPlaylistPlaying(false);
+                    triggerToast("Recitation loop paused.", "Recitation Queue");
+                  } else {
+                    setIsPlaylistPlaying(true);
+                    playPlaylistItem(currentPlaylistIndex !== null ? currentPlaylistIndex : 0);
+                    triggerToast("Resuming recitation loop...", "Recitation Queue");
+                  }
+                  audio.playSparkle('click');
+                }}
+                className={`p-3 rounded-full border active:scale-95 transition-all shadow-lg cursor-pointer ${
+                  isPlaylistPlaying 
+                    ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.25)]' 
+                    : 'bg-white/5 hover:bg-white/10 border-white/10 text-slate-200'
+                }`}
+                title={isPlaylistPlaying ? "Pause Recitation" : "Resume Recitation"}
+              >
+                {isPlaylistPlaying ? <Pause size={18} className="fill-amber-300" /> : <Play size={18} className="fill-slate-200" />}
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsPlaylistPlaying(false);
+                  setCurrentPlaylistIndex(null);
+                  triggerToast("Recitation loop stopped.", "Recitation Queue");
+                  audio.playSparkle('click');
+                }}
+                className="p-2 rounded-xl bg-white/5 hover:bg-red-500/10 hover:text-red-400 text-slate-300 border border-white/5 hover:border-red-500/20 active:scale-95 transition-all cursor-pointer"
+                title="Stop Recitation Loop"
+              >
+                <Square size={14} className="fill-current" />
+              </button>
+
+              <button
+                onClick={() => {
+                  const nextIdx = currentPlaylistIndex === playlist.length - 1 ? 0 : currentPlaylistIndex + 1;
+                  playPlaylistItem(nextIdx);
+                  audio.playSparkle('click');
+                }}
+                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 hover:border-white/10 active:scale-95 transition-all cursor-pointer"
+                title="Next Divine Name"
+              >
+                <SkipForward size={14} className="fill-current" />
+              </button>
+            </div>
+
+            {/* Right Side Settings: dropdown selectors */}
+            <div className="flex items-center gap-2 flex-1 max-w-xs justify-end">
+              {/* Qari Selection */}
+              <select
+                value={qariStyle}
+                onChange={(e) => {
+                  setQariStyle(e.target.value as any);
+                  audio.playSparkle('click');
+                  triggerToast(`Chant style: ${e.target.value === 'studio' ? 'Studio Vocal' : 'Celestial Chimes'}`, "Player Style");
+                }}
+                className="bg-black/60 border border-white/10 rounded-lg px-2 py-1 text-amber-300 font-mono text-[10px] focus:outline-none focus:border-amber-500/30 cursor-pointer max-w-[110px]"
+                title="Recitation Audio Engine Style"
+              >
+                <option value="studio">🎙️ Studio Qari</option>
+                <option value="celestial">✨ Celestial</option>
+              </select>
+
+              {/* Dhikr Interval */}
+              <select
+                value={dhikrInterval}
+                onChange={(e) => {
+                  setDhikrInterval(Number(e.target.value));
+                  audio.playSparkle('click');
+                  triggerToast(`Pause interval: ${e.target.value}s`, "Interval Set");
+                }}
+                className="bg-black/60 border border-white/10 rounded-lg px-2 py-1 text-amber-300 font-mono text-[10px] focus:outline-none focus:border-amber-500/30 cursor-pointer max-w-[100px]"
+                title="Pause Duration Between Names"
+              >
+                <option value={0}>Gapless</option>
+                <option value={1}>1s Pause</option>
+                <option value={3}>3s Pause</option>
+                <option value={5}>5s Pause</option>
+                <option value={10}>10s Pause</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* TOAST SYSTEM ALERTS VIEW STACK */}
       <div id="toast-alerts-stack" className="absolute bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
         {toasts.map(toast => (
@@ -1581,6 +3258,46 @@ export default function App() {
         completedCount={completed.length}
         favoritesCount={favorites.length}
         userEmail={currentUser ? currentUser.email : null}
+      />
+
+      {/* Gamified Spaced Learning & Analytics modals */}
+      <SpiritualDashboardModal
+        isOpen={showDashboardModal}
+        onClose={() => setShowDashboardModal(false)}
+        recitationHistory={recitationLogs}
+        getStreaks={getStreaks}
+        completedCount={completed.length}
+        favoritesCount={favorites.length}
+      />
+
+      <FlashcardsModal
+        isOpen={showFlashcardsModal}
+        onClose={() => setShowFlashcardsModal(false)}
+        leitnerBoxes={leitnerBoxes}
+        onUpdateBox={(nameId, targetBox) => {
+          setLeitnerBoxes(prev => {
+            const updated = { ...prev, [nameId]: targetBox };
+            localStorage.setItem('user_leitner_boxes', JSON.stringify(updated));
+            if (currentUser) {
+              setDoc(doc(db, 'user_data', currentUser.uid), {
+                leitnerBoxes: updated,
+                updatedAt: new Date().toISOString()
+              }, { merge: true });
+            }
+            return updated;
+          });
+          triggerToast(`Name card relocated to Box ${targetBox}`, "Memorizer Update");
+        }}
+        namesOfAllah={namesOfAllah}
+      />
+
+      <BadgesModal
+        isOpen={showBadgesModal}
+        onClose={() => setShowBadgesModal(false)}
+        completed={completed}
+        favorites={favorites}
+        getStreaks={getStreaks}
+        reflectionsCount={Object.values(reflections).flat().length}
       />
     </div>
   );
