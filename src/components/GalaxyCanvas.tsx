@@ -14,6 +14,9 @@ interface GalaxyCanvasProps {
   visualizationType: 'spiral' | 'nebula' | 'cluster' | 'wave' | 'supernova' | 'infinity' | 'galaxy' | 'pulsar' | 'aurora';
   theme: 'slate' | 'gold' | 'emerald' | 'rose' | 'ruby' | 'nebula' | 'sapphire' | 'amber' | 'amethyst';
   galaxyType: 'andromeda' | 'milkyway' | 'orion' | 'cosmicweb' | 'blackhole' | 'cluster' | 'pulsar' | 'supernova' | 'solarwind';
+  starDensity?: number;
+  constellationMode?: boolean;
+  particleSize?: number;
 }
 
 export interface GalaxyCanvasRef {
@@ -33,6 +36,9 @@ export const GalaxyCanvas = React.forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>
   visualizationType,
   theme,
   galaxyType,
+  starDensity = 9000,
+  constellationMode = false,
+  particleSize = 0.35,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -302,7 +308,7 @@ export const GalaxyCanvas = React.forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>
     scene.add(coreLight);
 
     // 5. Generate Galactic Starfield based on visualizationType
-    const starCount = 9000;
+    const starCount = starDensity;
     const starGeometry = new THREE.BufferGeometry();
     const starPositions = new Float32Array(starCount * 3);
     const starColors = new Float32Array(starCount * 3);
@@ -534,7 +540,7 @@ export const GalaxyCanvas = React.forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>
 
     const starTexture = new THREE.CanvasTexture(canvasStar);
     const starMaterial = new THREE.PointsMaterial({
-      size: 0.35,
+      size: particleSize,
       map: starTexture,
       transparent: true,
       vertexColors: true,
@@ -603,7 +609,7 @@ export const GalaxyCanvas = React.forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>
     categoriesList.forEach(cat => {
       const catNames = namesOfAllah.filter(n => n.category === cat);
       const allCompleted = catNames.length > 0 && catNames.every(n => completed.includes(n.id));
-      if (allCompleted) {
+      if (allCompleted || constellationMode) {
         const points: THREE.Vector3[] = [];
         catNames.forEach(item => {
           const nameIdx = namesOfAllah.findIndex(n => n.id === item.id);
@@ -619,10 +625,14 @@ export const GalaxyCanvas = React.forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>
           const constellationGeom = new THREE.BufferGeometry().setFromPoints(points);
           
           // Ethereal core glowing constellation line
+          // If allCompleted, make it very glowing, otherwise faint and ethereal
+          const lineOpacity = allCompleted ? 0.8 : 0.22;
+          const outerOpacity = allCompleted ? 0.25 : 0.06;
+
           const coreLineMat = new THREE.LineBasicMaterial({
             color: categoryColors[cat] || 0xffffff,
             transparent: true,
-            opacity: 0.8,
+            opacity: lineOpacity,
             blending: THREE.AdditiveBlending,
           });
           const constellationLine = new THREE.Line(constellationGeom, coreLineMat);
@@ -632,7 +642,7 @@ export const GalaxyCanvas = React.forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>
           const outerLineMat = new THREE.LineBasicMaterial({
             color: categoryColors[cat] || 0xffffff,
             transparent: true,
-            opacity: 0.25,
+            opacity: outerOpacity,
             blending: THREE.AdditiveBlending,
           });
           const outerConstellationLine = new THREE.Line(constellationGeom, outerLineMat);
@@ -908,7 +918,7 @@ export const GalaxyCanvas = React.forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>
       sphereGeom.dispose();
       starTexture.dispose();
     };
-  }, [visualizationType, theme, completed, favorites, galaxyType]);
+  }, [visualizationType, theme, completed, favorites, galaxyType, starDensity, constellationMode, particleSize]);
 
   // Handle Resize
   useEffect(() => {

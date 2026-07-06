@@ -207,6 +207,9 @@ interface FlashcardsProps extends LearningModuleProps {
   leitnerBoxes: { [key: string]: number };
   onUpdateBox: (nameId: number, targetBox: number) => void;
   namesOfAllah: any[];
+  remindersEnabled: boolean;
+  onToggleReminders: () => void;
+  onTestReminders?: () => void;
 }
 
 export const FlashcardsModal: React.FC<FlashcardsProps> = ({
@@ -215,6 +218,9 @@ export const FlashcardsModal: React.FC<FlashcardsProps> = ({
   leitnerBoxes,
   onUpdateBox,
   namesOfAllah,
+  remindersEnabled,
+  onToggleReminders,
+  onTestReminders,
 }) => {
   if (!isOpen) return null;
 
@@ -282,6 +288,40 @@ export const FlashcardsModal: React.FC<FlashcardsProps> = ({
           >
             <X size={18} />
           </button>
+        </div>
+
+        {/* Reminders Row */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3.5 bg-white/5 border border-white/5 rounded-2xl text-[11px] font-mono">
+          <div className="flex items-center gap-2">
+            <span className="text-amber-400">🔔</span>
+            <div className="flex flex-col">
+              <span className="font-bold text-amber-50">Local Browser Reminders</span>
+              <span className="text-[9px] text-slate-400">Alert when Box 2 (48h) or Box 3 (96h) cards are due</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            {remindersEnabled && (
+              <button
+                onClick={onTestReminders}
+                className="px-2 py-1 text-[9px] border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded-md transition-all active:scale-95 cursor-pointer"
+                title="Send a sample notification to test your browser permissions"
+              >
+                Test Alert
+              </button>
+            )}
+            <button
+              onClick={onToggleReminders}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                remindersEnabled ? 'bg-amber-500' : 'bg-slate-700'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  remindersEnabled ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
         </div>
 
         {/* Spaced Box Selector Rails */}

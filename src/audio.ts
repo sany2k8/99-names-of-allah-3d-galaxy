@@ -8,6 +8,9 @@ class AudioEngine {
   private analyser: AnalyserNode | null = null;
   public vocalAudio: HTMLAudioElement | null = null;
   private vocalSource: MediaElementAudioSourceNode | null = null;
+  private vocalDelayNode: DelayNode | null = null;
+  private vocalDelayGain: GainNode | null = null;
+  private vocalFilterNode: BiquadFilterNode | null = null;
 
   private init() {
     if (this.ctx) return;
@@ -23,6 +26,22 @@ class AudioEngine {
     this.analyser.fftSize = 64; // Small size for responsive, organic pulsing
     this.masterGain.connect(this.analyser);
     this.analyser.connect(this.ctx.destination);
+
+    // Initialize Vocal Delay/Echo Network for Special Reciter Acoustics
+    this.vocalDelayNode = this.ctx.createDelay(1.0);
+    this.vocalDelayGain = this.ctx.createGain();
+    this.vocalFilterNode = this.ctx.createBiquadFilter();
+    
+    this.vocalFilterNode.type = 'lowpass';
+    this.vocalFilterNode.frequency.setValueAtTime(1500, this.ctx.currentTime); // keep echo warm and soft
+    
+    // Create feedback loop: delay -> filter -> gain -> delay
+    this.vocalDelayNode.connect(this.vocalFilterNode);
+    this.vocalFilterNode.connect(this.vocalDelayGain);
+    this.vocalDelayGain.connect(this.vocalDelayNode);
+    
+    // Connect wet signal to masterGain
+    this.vocalDelayGain.connect(this.masterGain);
   }
 
   public getAudioLevel(): number {
@@ -34,6 +53,13 @@ class AudioEngine {
       sum += dataArray[i];
     }
     return sum / dataArray.length / 255; // Normalize to 0.0 - 1.0 range
+  }
+
+  public getFrequencyData(): Uint8Array {
+    if (!this.ctx || !this.analyser) return new Uint8Array(0);
+    const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+    this.analyser.getByteFrequencyData(dataArray);
+    return dataArray;
   }
 
   public setVolume(val: number) {
@@ -271,7 +297,7 @@ class AudioEngine {
     });
   }
 
-  public playNameAudio(transliteration: string, nameAr: string, id: number, style: 'studio' | 'celestial' = 'celestial') {
+  public playNameAudio(transliteration: string, nameAr: string, id: number, style: 'studio' | 'ghamdi_echo' | 'sudais_grand' | 'celestial' = 'celestial') {
     this.init();
     if (!this.ctx) return;
 
@@ -289,7 +315,22 @@ class AudioEngine {
       } catch (e) {}
     }
 
-    if (style === 'studio') {
+    if (style === 'studio' || style === 'ghamdi_echo' || style === 'sudais_grand') {
+      // Configure vocal effects based on style
+      if (this.vocalDelayGain && this.vocalDelayNode && this.vocalFilterNode) {
+        if (style === 'studio') {
+          this.vocalDelayGain.gain.setValueAtTime(0.0, now);
+        } else if (style === 'ghamdi_echo') {
+          this.vocalDelayNode.delayTime.setValueAtTime(0.28, now);
+          this.vocalDelayGain.gain.setValueAtTime(0.38, now);
+          this.vocalFilterNode.frequency.setValueAtTime(1200, now);
+        } else if (style === 'sudais_grand') {
+          this.vocalDelayNode.delayTime.setValueAtTime(0.45, now);
+          this.vocalDelayGain.gain.setValueAtTime(0.48, now);
+          this.vocalFilterNode.frequency.setValueAtTime(1800, now);
+        }
+      }
+
       // Create audio element if not already existing
       if (!this.vocalAudio) {
         this.vocalAudio = new Audio();
@@ -304,6 +345,9 @@ class AudioEngine {
         try {
           this.vocalSource = this.ctx.createMediaElementSource(this.vocalAudio);
           this.vocalSource.connect(this.masterGain);
+          if (this.vocalDelayNode) {
+            this.vocalSource.connect(this.vocalDelayNode);
+          }
         } catch (err) {
           console.warn("MediaElementAudioSourceNode creation failed:", err);
         }

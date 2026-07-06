@@ -16,6 +16,7 @@ import { SpiritualDashboardModal, FlashcardsModal, BadgesModal } from './compone
 import { GalaxyCanvas } from './components/GalaxyCanvas';
 import { AuthDialog } from './components/AuthDialog';
 import { NotificationHub } from './components/NotificationHub';
+import { AudioEqualizer } from './components/AudioEqualizer';
 import { audio } from './audio';
 import { 
   Search, 
@@ -191,7 +192,7 @@ export default function App() {
   const [showDashboardModal, setShowDashboardModal] = useState<boolean>(false);
   const [showFlashcardsModal, setShowFlashcardsModal] = useState<boolean>(false);
   const [showBadgesModal, setShowBadgesModal] = useState<boolean>(false);
-  const [qariStyle, setQariStyle] = useState<'studio' | 'celestial'>('celestial');
+  const [qariStyle, setQariStyle] = useState<'studio' | 'ghamdi_echo' | 'sudais_grand' | 'celestial'>('celestial');
   const [dhikrInterval, setDhikrInterval] = useState<number>(0); // Seconds: 0, 1, 3, 5, 10
   const [translationSyncEnabled, setTranslationSyncEnabled] = useState<boolean>(true);
   const [activeWordIndex, setActiveWordIndex] = useState<number>(-1);
@@ -208,6 +209,37 @@ export default function App() {
 
   // Detailed recitation logs
   const [recitationLogs, setRecitationLogs] = useState<Array<{ timestamp: string; nameId: number; nameTranslit: string }>>([]);
+
+  // Daily goal and star density states
+  const [dailyGoalTarget, setDailyGoalTarget] = useState<number>(() => {
+    const cached = localStorage.getItem('allah_names_daily_goal_target');
+    return cached ? parseInt(cached, 10) : 5;
+  });
+
+  const [starDensity, setStarDensity] = useState<number>(() => {
+    const cached = localStorage.getItem('allah_names_star_density');
+    return cached ? parseInt(cached, 10) : 9000;
+  });
+
+  const [particleSize, setParticleSize] = useState<number>(() => {
+    const cached = localStorage.getItem('allah_names_particle_size');
+    return cached ? parseFloat(cached) : 0.35;
+  });
+
+  const [constellationMode, setConstellationMode] = useState<boolean>(() => {
+    const cached = localStorage.getItem('allah_names_constellation_mode');
+    return cached !== 'false'; // default true
+  });
+
+  const [leitnerRemindersEnabled, setLeitnerRemindersEnabled] = useState<boolean>(() => {
+    const cached = localStorage.getItem('allah_names_leitner_reminders');
+    return cached === 'true'; // default false
+  });
+
+  const [autoPlayOnSelect, setAutoPlayOnSelect] = useState<boolean>(() => {
+    const cached = localStorage.getItem('allah_names_autoplay_on_select');
+    return cached !== 'false'; // default true
+  });
 
   // Theme helper definitions
   const isLight = appThemeMode === 'light' || appThemeMode === 'sepia';
@@ -464,6 +496,126 @@ export default function App() {
     });
   };
 
+  const handleUpdateDailyGoalTarget = (newTarget: number) => {
+    const target = Math.max(1, Math.min(99, newTarget));
+    setDailyGoalTarget(target);
+    localStorage.setItem('allah_names_daily_goal_target', target.toString());
+
+    if (auth.currentUser) {
+      const userDocRef = doc(db, 'user_data', auth.currentUser.uid);
+      setDoc(userDocRef, {
+        dailyGoalTarget: target,
+        updatedAt: new Date().toISOString()
+      }, { merge: true }).catch(err => console.error("Cloud daily goal target sync error:", err));
+    }
+  };
+
+  // SPACED REPETITION REMINDERS & NOTIFICATION SYSTEM
+  const checkAndNotifyDueLeitner = (forceNotify: boolean = false) => {
+    if (!('Notification' in window)) {
+      if (forceNotify) {
+        triggerToast("Your browser does not support desktop notifications.", "Reminders");
+      }
+      return;
+    }
+
+    // Calculate due cards
+    const timestamps = JSON.parse(localStorage.getItem('user_leitner_timestamps') || '{}');
+    const boxes = leitnerBoxes;
+    const now = Date.now();
+    
+    let dueBox2 = 0;
+    let dueBox3 = 0;
+
+    Object.keys(boxes).forEach((idStr) => {
+      const id = parseInt(idStr, 10);
+      const box = boxes[id];
+      const lastReviewed = timestamps[id] || 0;
+      const elapsedMs = now - lastReviewed;
+
+      // Box 2 is due after 48h (2 days = 172800000 ms)
+      if (box === 2 && (lastReviewed === 0 || elapsedMs >= 2 * 24 * 3600 * 1000)) {
+        dueBox2++;
+      }
+      // Box 3 is due after 96h (4 days = 345600000 ms)
+      if (box === 3 && (lastReviewed === 0 || elapsedMs >= 4 * 24 * 3600 * 1000)) {
+        dueBox3++;
+      }
+    });
+
+    const totalDue = dueBox2 + dueBox3;
+
+    if (totalDue > 0 || forceNotify) {
+      if (Notification.permission === 'granted') {
+        let title = "Leitner Repetition Review Due";
+        let body = "";
+
+        if (dueBox2 > 0 && dueBox3 > 0) {
+          body = `You have ${dueBox2} cards in Box 2 and ${dueBox3} cards in Box 3 ready for spaced repetition review!`;
+        } else if (dueBox2 > 0) {
+          body = `You have ${dueBox2} cards in Box 2 ready for review (48-hour cycle).`;
+        } else if (dueBox3 > 0) {
+          body = `You have ${dueBox3} cards in Box 3 ready for review (96-hour cycle).`;
+        } else {
+          body = `All your cards are current! Keep up the daily consistency to build your streak.`;
+        }
+
+        new Notification(title, {
+          body: body,
+          icon: "/icon.png"
+        });
+
+        triggerToast(`Sent reminder: ${totalDue} cards due for review!`, "Reminders");
+      } else if (forceNotify) {
+        triggerToast("Please grant notification permissions to enable reminders.", "Reminders");
+      }
+    }
+  };
+
+  const handleToggleReminders = () => {
+    if (!('Notification' in window)) {
+      triggerToast("Desktop notifications are not supported in this browser.", "Reminders");
+      return;
+    }
+
+    if (Notification.permission === 'denied') {
+      triggerToast("Notification permission was previously denied. Please reset permissions in your browser address bar.", "Reminders");
+      return;
+    }
+
+    if (!leitnerRemindersEnabled) {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          setLeitnerRemindersEnabled(true);
+          localStorage.setItem('allah_names_leitner_reminders', 'true');
+          triggerToast("Spaced Repetition Reminders Enabled!", "Reminders");
+          
+          // Send nice confirmation notification immediately
+          new Notification("Reminders Subscribed", {
+            body: "You will receive timely alerts when Box 2 or Box 3 cards are due for memorization review.",
+            icon: "/icon.png"
+          });
+        } else {
+          triggerToast("Notification permission denied.", "Reminders");
+        }
+      });
+    } else {
+      setLeitnerRemindersEnabled(false);
+      localStorage.setItem('allah_names_leitner_reminders', 'false');
+      triggerToast("Reminders Disabled.", "Reminders");
+    }
+  };
+
+  // Check on load after 5 seconds
+  useEffect(() => {
+    if (leitnerRemindersEnabled && Notification.permission === 'granted') {
+      const delayTimer = setTimeout(() => {
+        checkAndNotifyDueLeitner(false);
+      }, 5000);
+      return () => clearTimeout(delayTimer);
+    }
+  }, [leitnerRemindersEnabled, leitnerBoxes]);
+
   // Streak calculators
   const getStreaks = () => {
     const todayStr = new Date().toISOString().split('T')[0];
@@ -520,6 +672,15 @@ export default function App() {
       maxStreak: Math.max(maxStreak, currentStreak),
       lastRecitation: sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : null
     };
+  };
+
+  const getNamesStudiedToday = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const studiedToday = recitationLogs.filter(log => {
+      return log.timestamp && log.timestamp.split('T')[0] === todayStr;
+    });
+    const uniqueIds = new Set(studiedToday.map(log => log.nameId));
+    return uniqueIds.size;
   };
 
   // Save reflection journal entries
@@ -888,6 +1049,12 @@ export default function App() {
             const cloudHistory = data.recitationHistory || {};
             const cloudLogs = data.recitationLogs || [];
             const cloudPlaylists = data.playlists || [];
+            const cloudTarget = data.dailyGoalTarget;
+
+            if (cloudTarget) {
+              setDailyGoalTarget(cloudTarget);
+              localStorage.setItem('allah_names_daily_goal_target', cloudTarget.toString());
+            }
             
             // Merge cloud data with local data, prioritizing cloud data
             setFavorites(prev => {
@@ -943,6 +1110,7 @@ export default function App() {
             const currentHistory = JSON.parse(localStorage.getItem('recitation_history') || '{}');
             const currentLogs = JSON.parse(localStorage.getItem('recitation_logs') || '[]');
             const currentPlaylists = JSON.parse(localStorage.getItem('allah_names_custom_playlists') || '[]');
+            const currentDailyGoalTarget = JSON.parse(localStorage.getItem('allah_names_daily_goal_target') || '5');
             await setDoc(userDocRef, {
               userId: user.uid,
               favorites: currentFavs,
@@ -952,6 +1120,7 @@ export default function App() {
               recitationHistory: currentHistory,
               recitationLogs: currentLogs,
               playlists: currentPlaylists,
+              dailyGoalTarget: currentDailyGoalTarget,
               updatedAt: new Date().toISOString()
             });
           }
@@ -1112,7 +1281,9 @@ export default function App() {
           selectedId={selectedName ? selectedName.id : null}
           onSelectName={(item) => {
             setSelectedName(item);
-            audio.playNameAudio(item.transliteration, item.name, item.id);
+            if (autoPlayOnSelect) {
+              audio.playNameAudio(item.transliteration, item.name, item.id, qariStyle);
+            }
             audio.playSparkle('click');
           }}
           favorites={favorites}
@@ -1123,6 +1294,9 @@ export default function App() {
           visualizationType={visualizationType}
           theme={theme}
           galaxyType={galaxyType}
+          starDensity={starDensity}
+          constellationMode={constellationMode}
+          particleSize={particleSize}
         />
       </div>
 
@@ -1140,7 +1314,7 @@ export default function App() {
           }}
           className="relative flex items-center gap-2 pointer-events-auto"
         >
-          <div className={`absolute right-12 z-50 grid grid-cols-3 gap-1.5 w-[240px] p-2.5 rounded-2xl border shadow-2xl backdrop-blur-xl transition-all duration-300 transform-gpu before:absolute before:inset-y-0 before:-right-4 before:w-4 before:content-[''] ${
+          <div className={`absolute right-12 z-50 flex flex-col gap-3 w-[260px] p-3.5 rounded-2xl border shadow-2xl backdrop-blur-xl transition-all duration-300 transform-gpu before:absolute before:inset-y-0 before:-right-4 before:w-4 before:content-[''] ${
             activeRightMenu === 'galaxy' 
               ? 'translate-x-0 opacity-100 scale-100 pointer-events-auto' 
               : 'translate-x-4 opacity-0 scale-95 pointer-events-none'
@@ -1155,42 +1329,128 @@ export default function App() {
             theme === 'amethyst' ? 'amethyst-glass-panel border-purple-500/30' :
             'glass-panel border-white/10'
           }`}>
-            {[
-              { id: 'andromeda', name: 'Andromeda', icon: '🌀' },
-              { id: 'milkyway', name: 'Milky Way', icon: '🌌' },
-              { id: 'orion', name: 'Orion Nebula', icon: '⭕' },
-              { id: 'cosmicweb', name: 'Cosmic Web', icon: '🕸️' },
-              { id: 'blackhole', name: 'Black Hole', icon: '🕳️' },
-              { id: 'cluster', name: 'Star Cluster', icon: '🔮' },
-              { id: 'pulsar', name: 'Pulsar Jet', icon: '💫' },
-              { id: 'supernova', name: 'Supernova', icon: '💥' },
-              { id: 'solarwind', name: 'Solar Wind', icon: '🌊' },
-            ].map(opt => (
-              <button
-                key={opt.id}
-                onClick={() => {
-                  setGalaxyType(opt.id as any);
-                  audio.playSparkle('click');
-                  setActiveRightMenu(null); // slide back to right
+            <div className="grid grid-cols-3 gap-1.5 w-full">
+              {[
+                { id: 'andromeda', name: 'Andromeda', icon: '🌀' },
+                { id: 'milkyway', name: 'Milky Way', icon: '🌌' },
+                { id: 'orion', name: 'Orion Nebula', icon: '⭕' },
+                { id: 'cosmicweb', name: 'Cosmic Web', icon: '🕸️' },
+                { id: 'blackhole', name: 'Black Hole', icon: '🕳️' },
+                { id: 'cluster', name: 'Star Cluster', icon: '🔮' },
+                { id: 'pulsar', name: 'Pulsar Jet', icon: '💫' },
+                { id: 'supernova', name: 'Supernova', icon: '💥' },
+                { id: 'solarwind', name: 'Solar Wind', icon: '🌊' },
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => {
+                    setGalaxyType(opt.id as any);
+                    audio.playSparkle('click');
+                    setActiveRightMenu(null); // slide back to right
+                  }}
+                  className={`flex flex-col items-center justify-center gap-1.5 p-2 rounded-xl text-[9px] font-mono tracking-wider transition-all border text-center cursor-pointer ${
+                    galaxyType === opt.id
+                      ? theme === 'gold' ? 'bg-amber-500/25 border-amber-500/60 text-amber-200' :
+                        theme === 'emerald' ? 'bg-emerald-500/25 border-emerald-500/60 text-emerald-200' :
+                        theme === 'rose' ? 'bg-fuchsia-500/25 border-fuchsia-500/60 text-fuchsia-200' :
+                        theme === 'ruby' ? 'bg-red-500/25 border-red-500/60 text-red-200' :
+                        theme === 'nebula' ? 'bg-violet-500/25 border-violet-500/60 text-violet-200' :
+                        theme === 'sapphire' ? 'bg-blue-500/25 border-blue-500/60 text-blue-200' :
+                        theme === 'amber' ? 'bg-orange-500/25 border-orange-500/60 text-orange-200' :
+                        theme === 'amethyst' ? 'bg-purple-500/25 border-purple-500/60 text-purple-200' :
+                        'bg-sky-500/25 border-sky-500/60 text-sky-200'
+                      : 'bg-white/5 border-transparent text-slate-400 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <span className="text-sm">{opt.icon}</span>
+                  <span className="text-[8px] leading-tight truncate w-full">{opt.name}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* STAR DENSITY ADJUSTMENT SLIDER */}
+            <div className="border-t border-white/10 pt-2.5 flex flex-col gap-1.5 w-full">
+              <div className="flex items-center justify-between text-[10px] font-mono tracking-wider text-slate-400">
+                <span>Star Density</span>
+                <span className="text-amber-400 font-bold">{starDensity} stars</span>
+              </div>
+              <input
+                type="range"
+                min="1000"
+                max="25000"
+                step="500"
+                value={starDensity}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setStarDensity(val);
+                  localStorage.setItem('allah_names_star_density', val.toString());
                 }}
-                className={`flex flex-col items-center justify-center gap-1.5 p-2 rounded-xl text-[9px] font-mono tracking-wider transition-all border text-center cursor-pointer ${
-                  galaxyType === opt.id
-                    ? theme === 'gold' ? 'bg-amber-500/25 border-amber-500/60 text-amber-200' :
-                      theme === 'emerald' ? 'bg-emerald-500/25 border-emerald-500/60 text-emerald-200' :
-                      theme === 'rose' ? 'bg-fuchsia-500/25 border-fuchsia-500/60 text-fuchsia-200' :
-                      theme === 'ruby' ? 'bg-red-500/25 border-red-500/60 text-red-200' :
-                      theme === 'nebula' ? 'bg-violet-500/25 border-violet-500/60 text-violet-200' :
-                      theme === 'sapphire' ? 'bg-blue-500/25 border-blue-500/60 text-blue-200' :
-                      theme === 'amber' ? 'bg-orange-500/25 border-orange-500/60 text-orange-200' :
-                      theme === 'amethyst' ? 'bg-purple-500/25 border-purple-500/60 text-purple-200' :
-                      'bg-sky-500/25 border-sky-500/60 text-sky-200'
-                    : 'bg-white/5 border-transparent text-slate-400 hover:text-white hover:bg-white/10'
+                className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
+              />
+            </div>
+
+            {/* PARTICLE SIZE ADJUSTMENT SLIDER */}
+            <div className="border-t border-white/10 pt-2 flex flex-col gap-1.5 w-full">
+              <div className="flex items-center justify-between text-[10px] font-mono tracking-wider text-slate-400">
+                <span>Particle Size</span>
+                <span className="text-amber-400 font-bold">{particleSize.toFixed(2)}px</span>
+              </div>
+              <input
+                type="range"
+                min="0.10"
+                max="1.50"
+                step="0.05"
+                value={particleSize}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setParticleSize(val);
+                  localStorage.setItem('allah_names_particle_size', val.toString());
+                }}
+                className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400"
+              />
+            </div>
+
+            {/* CONSTELLATION MODE TOGGLE */}
+            <div className="border-t border-white/10 pt-2 flex items-center justify-between w-full">
+              <span className="text-[10px] font-mono tracking-wider text-slate-400">Constellation Mode</span>
+              <button
+                onClick={() => {
+                  setConstellationMode(!constellationMode);
+                  audio.playSparkle('click');
+                  localStorage.setItem('allah_names_constellation_mode', (!constellationMode).toString());
+                }}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  constellationMode ? 'bg-amber-500' : 'bg-slate-700'
                 }`}
               >
-                <span className="text-sm">{opt.icon}</span>
-                <span className="text-[8px] leading-tight truncate w-full">{opt.name}</span>
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    constellationMode ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
               </button>
-            ))}
+            </div>
+
+            {/* AUTOPLAY ON SELECT TOGGLE */}
+            <div className="border-t border-white/10 pt-2 flex items-center justify-between w-full">
+              <span className="text-[10px] font-mono tracking-wider text-slate-400">Auto-Play on Select</span>
+              <button
+                onClick={() => {
+                  setAutoPlayOnSelect(!autoPlayOnSelect);
+                  audio.playSparkle('click');
+                  localStorage.setItem('allah_names_autoplay_on_select', (!autoPlayOnSelect).toString());
+                }}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  autoPlayOnSelect ? 'bg-amber-500' : 'bg-slate-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    autoPlayOnSelect ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
           </div>
 
           <button
@@ -1496,20 +1756,20 @@ export default function App() {
       <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-gradient-to-tl from-amber-900/10 via-transparent to-transparent rounded-full blur-[100px] pointer-events-none z-1"></div>
 
       {/* TOP HEADS UP DISPLAY / HEADER ACTION BAR */}
-      <header className="absolute top-0 inset-x-0 z-40 pointer-events-none flex flex-col sm:flex-row items-center justify-between px-4 sm:px-6 py-4 gap-4">
-        <div className="pointer-events-auto flex items-center gap-3 bg-black/45 backdrop-blur-md border border-amber-500/20 rounded-full px-4 py-2.5 select-none shadow-2xl">
-          <div className="w-8 h-8 border-2 border-amber-500/50 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.25)] shrink-0">
-            <div className="w-4.5 h-4.5 border border-amber-400 rounded-sm rotate-45 flex items-center justify-center">
-              <div className="w-1.5 h-1.5 bg-amber-400 rounded-full"></div>
+      <header className="absolute top-0 inset-x-0 z-40 pointer-events-none flex flex-col sm:flex-row items-center justify-between pl-3 sm:pl-4 pr-4 sm:pr-6 py-4 gap-4">
+        <div className="pointer-events-auto flex items-center gap-2.5 bg-black/45 backdrop-blur-md border border-amber-500/20 rounded-full pl-3.5 pr-4 py-2 select-none shadow-2xl">
+          <div className="w-7 h-7 border-2 border-amber-500/50 rounded-full flex items-center justify-center shadow-[0_0_12px_rgba(245,158,11,0.25)] shrink-0">
+            <div className="w-4 h-4 border border-amber-400 rounded-sm rotate-45 flex items-center justify-center">
+              <div className="w-1.2 h-1.2 bg-amber-400 rounded-full"></div>
             </div>
           </div>
-          <div>
-            <h1 className="text-xs sm:text-sm font-light tracking-[0.2em] text-amber-50 uppercase font-display">Al-Asma-ul-Husna</h1>
-            <p className="text-[8px] sm:text-[9px] tracking-widest text-amber-500/60 uppercase font-mono">The 99 Beautiful Names</p>
+          <div className="flex flex-col">
+            <h1 className="text-xs sm:text-[12.5px] font-light tracking-[0.18em] text-amber-50 uppercase font-display leading-tight">Al-Asma-ul-Husna</h1>
+            <p className="text-[8px] sm:text-[8.5px] tracking-widest text-amber-500/60 uppercase font-mono mt-0.5 leading-none">The 99 Beautiful Names</p>
           </div>
-          <div className="pl-3 ml-0.5 border-l border-white/10 flex flex-col justify-center">
-            <span className="text-xs sm:text-[14px] font-bold font-mono text-amber-400 leading-none">{exploredNames.length}</span>
-            <span className="text-[7px] sm:text-[8px] font-mono tracking-wider text-slate-400 uppercase mt-0.5 whitespace-nowrap font-semibold">Names Explored</span>
+          <div className="pl-2.5 ml-0.5 border-l border-white/10 flex flex-col justify-center">
+            <span className="text-xs sm:text-[13px] font-bold font-mono text-amber-400 leading-none">{exploredNames.length}</span>
+            <span className="text-[7px] sm:text-[7.5px] font-mono tracking-wider text-slate-400 uppercase mt-0.5 whitespace-nowrap font-semibold leading-none">Names Explored</span>
           </div>
         </div>
 
@@ -1569,6 +1829,8 @@ export default function App() {
             >
               {audioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
             </button>
+
+            <AudioEqualizer audioEnabled={audioEnabled} theme={theme} />
 
             {audioEnabled && (
               <>
@@ -1835,9 +2097,9 @@ export default function App() {
         </div>
 
         {/* SLIDING VIEWPORT */}
-        <div className="flex-1 overflow-hidden relative w-full h-full flex flex-col">
+        <div className="flex-1 overflow-hidden relative w-full min-h-0 flex flex-col">
           <div 
-            className="flex-1 flex flex-row transition-transform duration-500 ease-out transform-gpu h-full"
+            className="flex-1 flex flex-row transition-transform duration-500 ease-out transform-gpu min-h-0"
             style={{ 
               width: '300%',
               transform: activeSidebarTab === 'directory' ? 'translateX(0%)' : activeSidebarTab === 'dhikr' ? 'translateX(-33.33333%)' : 'translateX(-66.66667%)' 
@@ -2400,7 +2662,7 @@ export default function App() {
                     </div>
                     <div>
                       <span className={`text-xs font-semibold font-display ${isLight ? 'text-slate-800' : 'text-amber-50/90'}`}>Memorization Goals</span>
-                      <span className={`font-mono text-[9px] block mt-0.5 ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>{completed.length} / 99 completed</span>
+                      <p className={`font-mono text-[9px] mt-0.5 leading-normal ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>{completed.length} / 99 completed</p>
                     </div>
                   </div>
 
@@ -2417,6 +2679,91 @@ export default function App() {
                 </div>
               </div>
 
+              {/* DAILY GOAL PROGRESS METRIC CARD */}
+              {(() => {
+                const studiedCount = getNamesStudiedToday();
+                const targetCount = dailyGoalTarget;
+                const percent = targetCount > 0 ? Math.min(100, Math.round((studiedCount / targetCount) * 100)) : 0;
+                const radius = 24;
+                const circumference = 2 * Math.PI * radius;
+                const strokeDashoffset = circumference - (percent / 100) * circumference;
+
+                return (
+                  <div className={`p-4.5 rounded-2xl border flex items-center justify-between shadow-lg relative overflow-hidden group ${isLight ? 'border-slate-200 bg-white' : 'border-white/5 bg-black/35'}`}>
+                    <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-transparent pointer-events-none" />
+                    <div className="flex items-center gap-3 z-10">
+                      <div className="w-10 h-10 rounded-full border border-amber-500/20 bg-amber-500/5 flex items-center justify-center text-amber-500 shadow-inner shrink-0">
+                        <Calendar size={18} />
+                      </div>
+                      <div>
+                        <span className={`text-xs font-semibold font-display block ${isLight ? 'text-slate-800' : 'text-amber-50/90'}`}>Daily Study Goal</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className={`text-sm font-bold font-mono ${isLight ? 'text-slate-900' : 'text-amber-400'}`}>{studiedCount}</span>
+                          <span className="text-[10px] text-slate-500">/</span>
+                          <span className={`text-xs font-mono ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>{targetCount} names</span>
+                        </div>
+                        {/* Goal target adjust controls */}
+                        <div className="flex items-center gap-1 mt-2">
+                          <button 
+                            onClick={() => handleUpdateDailyGoalTarget(targetCount - 1)}
+                            className={`w-5 h-5 rounded flex items-center justify-center text-xs font-bold border transition-all cursor-pointer ${
+                              isLight 
+                                ? 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900' 
+                                : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white'
+                            }`}
+                            title="Decrease Daily Goal"
+                          >
+                            -
+                          </button>
+                          <span className="text-[9px] font-mono font-semibold px-1 text-slate-500">Target</span>
+                          <button 
+                            onClick={() => handleUpdateDailyGoalTarget(targetCount + 1)}
+                            className={`w-5 h-5 rounded flex items-center justify-center text-xs font-bold border transition-all cursor-pointer ${
+                              isLight 
+                                ? 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900' 
+                                : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white'
+                            }`}
+                            title="Increase Daily Goal"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Progress Ring Visualizer */}
+                    <div className="relative w-14 h-14 flex items-center justify-center shrink-0 z-10">
+                      <svg className="w-14 h-14 transform -rotate-90">
+                        {/* Background track */}
+                        <circle
+                          cx="28"
+                          cy="28"
+                          r={radius}
+                          className={isLight ? 'stroke-slate-100' : 'stroke-white/5'}
+                          strokeWidth="3.5"
+                          fill="transparent"
+                        />
+                        {/* Glowing active progress */}
+                        <circle
+                          cx="28"
+                          cy="28"
+                          r={radius}
+                          className="stroke-amber-500 transition-all duration-500"
+                          strokeWidth="3.5"
+                          strokeDasharray={circumference}
+                          strokeDashoffset={strokeDashoffset}
+                          strokeLinecap="round"
+                          fill="transparent"
+                        />
+                      </svg>
+                      <span className={`absolute text-[10px] font-mono font-bold ${percent >= 100 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                        {percent}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Consistency Streak Card */}
               <div className={`border rounded-2xl p-4 flex items-center justify-between shadow-lg relative overflow-hidden group ${
                 isLight ? 'border-slate-200 bg-white' : 'border-white/5 bg-black/25'
@@ -2428,7 +2775,7 @@ export default function App() {
                   </div>
                   <div>
                     <span className={`text-xs font-semibold font-display ${isLight ? 'text-slate-800' : 'text-amber-50'}`}>Consistent Streak</span>
-                    <span className={`text-[10px] block font-mono mt-0.5 ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>Track daily recitation Streaks</span>
+                    <p className={`text-[10px] font-mono mt-0.5 leading-normal pb-0.5 ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>Track daily recitation Streaks</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -2831,8 +3178,10 @@ export default function App() {
                   }}
                   className="bg-black/60 border border-white/10 rounded-lg px-2 py-1.5 text-amber-300 focus:outline-none focus:border-amber-500/50 cursor-pointer"
                 >
-                  <option value="celestial">Celestial Chimes</option>
-                  <option value="studio">Studio Vocal (HQ)</option>
+                  <option value="celestial">✨ Celestial Chimes</option>
+                  <option value="studio">🎙️ Mishary Al-Afasy (Studio)</option>
+                  <option value="ghamdi_echo">🕌 Saad Al-Ghamdi (Medina Echo)</option>
+                  <option value="sudais_grand">🕋 Abdul Rahman Al-Sudais (Mecca Grand)</option>
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
@@ -3202,13 +3551,19 @@ export default function App() {
                 onChange={(e) => {
                   setQariStyle(e.target.value as any);
                   audio.playSparkle('click');
-                  triggerToast(`Chant style: ${e.target.value === 'studio' ? 'Studio Vocal' : 'Celestial Chimes'}`, "Player Style");
+                  let styleName = "Celestial";
+                  if (e.target.value === 'studio') styleName = "Studio Mishary";
+                  else if (e.target.value === 'ghamdi_echo') styleName = "Saad Al-Ghamdi (Medina Echo)";
+                  else if (e.target.value === 'sudais_grand') styleName = "Al-Sudais (Mecca Echo)";
+                  triggerToast(`Chant style: ${styleName}`, "Player Style");
                 }}
-                className="bg-black/60 border border-white/10 rounded-lg px-2 py-1 text-amber-300 font-mono text-[10px] focus:outline-none focus:border-amber-500/30 cursor-pointer max-w-[110px]"
+                className="bg-black/60 border border-white/10 rounded-lg px-2 py-1 text-amber-300 font-mono text-[10px] focus:outline-none focus:border-amber-500/30 cursor-pointer max-w-[130px]"
                 title="Recitation Audio Engine Style"
               >
-                <option value="studio">🎙️ Studio Qari</option>
                 <option value="celestial">✨ Celestial</option>
+                <option value="studio">🎙️ Studio Qari</option>
+                <option value="ghamdi_echo">🕌 Saad Al-Ghamdi</option>
+                <option value="sudais_grand">🕋 Al-Sudais</option>
               </select>
 
               {/* Dhikr Interval */}
@@ -3278,6 +3633,12 @@ export default function App() {
           setLeitnerBoxes(prev => {
             const updated = { ...prev, [nameId]: targetBox };
             localStorage.setItem('user_leitner_boxes', JSON.stringify(updated));
+
+            // Track review timestamp for Leitner schedule
+            const timestamps = JSON.parse(localStorage.getItem('user_leitner_timestamps') || '{}');
+            timestamps[nameId] = Date.now();
+            localStorage.setItem('user_leitner_timestamps', JSON.stringify(timestamps));
+
             if (currentUser) {
               setDoc(doc(db, 'user_data', currentUser.uid), {
                 leitnerBoxes: updated,
@@ -3289,6 +3650,9 @@ export default function App() {
           triggerToast(`Name card relocated to Box ${targetBox}`, "Memorizer Update");
         }}
         namesOfAllah={namesOfAllah}
+        remindersEnabled={leitnerRemindersEnabled}
+        onToggleReminders={handleToggleReminders}
+        onTestReminders={() => checkAndNotifyDueLeitner(true)}
       />
 
       <BadgesModal
